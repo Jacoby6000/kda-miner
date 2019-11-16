@@ -1,0 +1,36 @@
+resolver: lts-14.14
+
+ghc-options: {"$locals": -ddump-to-file -ddump-hi}
+
+extra-deps:
+  # --- Missing from Stackage --- #
+  - generic-lens-1.2.0.1
+  - paths-0.2.0.0
+  - streaming-events-1.0.0
+  - strict-tuple-0.1.3
+
+  # --- Transitive Chainweb Dependencies --- #
+  - QuickCheck-GenT-0.2.2
+  - bloomfilter-2.0.1.0
+  - digraph-0.1.0.2
+  - fake-0.1.1.2
+  - loglevel-0.1.0.0
+  - merkle-log-0.1.0.0
+  - tls-1.5.2
+  - yet-another-logger-0.3.1
+  - OpenCL-1.0.3.4@sha256:ef90f955632749353251887ce66357c5ed8e98e8b437ff91ce406ae9187f3953,2590
+
+  # --- Transitive Pact Dependencies --- #
+  - ed25519-donna-0.1.1
+  - sbv-8.2
+  - trifecta-2.1
+  - github: kadena-io/thyme
+    commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
+
+  # --- Custom Pins --- #
+  - github: kadena-io/chainweb-node
+    commit: 91331827cdaa23f3ccdd5e62c115240c62b62418
+  - github: kadena-io/chainweb-storage
+    commit: 17a5fb130926582eff081eeb1b94cb6c7097c67a
+  - github: kadena-io/pact
+    commit: 0bab430ade7898a6ff2607eee71e2f14b294d3e3
