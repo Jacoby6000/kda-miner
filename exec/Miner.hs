@@ -249,10 +249,17 @@ getWork = do
 mining :: WorkBytes -> RIO Env ()
 mining wb = do
     e <- ask 
+    clProgram <- loadProgram $ envGpu e
     race updateSignal (runMiner (envGpu e) tbytes hbytes) >>= traverse_ miningSuccess
     getWork >>= traverse_ mining
   where
     T3 (ChainBytes cbs) tbytes hbytes@(HeaderBytes hbs) = unWorkBytes wb
+
+
+    loadProgram :: GPUEnv -> CLProgram
+    loadProgram env = do
+      contents <- readFile $ T.unpack (envKernelPath env)
+      clCreateProgramWithSource ctx $ T.unpack contents
 
     chain :: IO Int
     chain = chainIdInt <$> runGet decodeChainId cbs
@@ -317,9 +324,9 @@ mining wb = do
       when (isLeft res) $ logWarn "Failed to submit new BlockHeader!"
 
 runMiner :: GPUEnv -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
-runMiner g t h@(HeaderBytes blockbytes) = do
+runMiner t h@(HeaderBytes blockbytes) = do
     e <- ask
-    res <- liftIO $ runGPU g t h
+    res <- liftIO $ runGPU  t h
     case res of
       Left err -> do
           logError . display . T.pack $ "Error running GPU miner: " <> err
@@ -334,18 +341,14 @@ runMiner g t h@(HeaderBytes blockbytes) = do
 
           if | not (prop_block_pow bh) -> do
                  logError "Bad nonce returned from GPU!"
-                 runMiner g t h
+                 runMiner t h
              | otherwise -> do
                  modifyIORef' (envHashes e) (+ numNonces)
                  modifyIORef' (envSecs e) (+ secs)
                  pure $! HeaderBytes newBytes
 
-runGPU :: GPUEnv -> TargetBytes -> HeaderBytes -> IO (Either String MiningResult)
-runGPU (GPUEnv kernelPath contextIndex deviceIndex) (TargetBytes target) (HeaderBytes header) = error "fail"
- where
-  loadProgram ctx = do
-    contents <- readFile $ T.unpack kernelPath 
-    clCreateProgramWithSource ctx $ T.unpack contents
- 
+runGPU :: CLContext -> CLProgram -> TargetBytes -> HeaderBytes -> IO (Either String MiningResult)
+runGPU ctx prg (TargetBytes target) (HeaderBytes head) = 
+
 showDevices :: IO Text
 showDevices = pure "Nothing, yet"
