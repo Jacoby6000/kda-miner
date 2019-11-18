@@ -20,6 +20,7 @@ import           Data.Generics.Product.Fields (field)
 import           Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import           Data.Tuple.Strict (T2(..), T3(..))
 import           Data.Text.IO
+import qualified Data.Text as TT
 import           Data.OpenCL
 import           Network.Connection (TLSSettings(..))
 import           Network.HTTP.Client hiding (Proxy(..), responseBody)
@@ -98,7 +99,7 @@ pClientArgs :: Parser ClientArgs
 pClientArgs = ClientArgs <$> pLog <*> some pUrl <*> pMiner <*> pChainId
 
 pCommand :: Parser Command
-pCommand = hsubparser (command "gpu" (info gpuOpts (progDesc "Perform GPU mining")) 
+pCommand = hsubparser (command "open-cl" (info gpuOpts (progDesc "Perform OpenCL mining")) 
                     <> command "list-devices" (info (pure Devices) (progDesc "List available GPU devices") ))
 
 pKernelPath :: Parser Text
@@ -164,7 +165,7 @@ pPred = (\s -> P.Name $ P.BareName s def) <$>
 main :: IO ()
 main = execParser opts >>= \case
     (GPU gpuEnv clientArgs) -> work gpuEnv clientArgs >> exitFailure
-    Devices -> showDevices >>= (\f -> putStrLn $ T.pack (f ""))
+    Devices -> showDevices putStrLn
   where
     opts :: ParserInfo Command
     opts = info (pCommand <**> helper)
@@ -202,6 +203,7 @@ getInfo m url = fmap nodeVersion <$> runClientM (client (Proxy @NodeInfoApi)) ce
 
 run :: RIO Env ()
 run = do
+    showDevices (logInfo . display)
     logInfo "Starting Miner."
     getWork >>= traverse_ mining 
 
@@ -352,5 +354,7 @@ runMiner g t h@(HeaderBytes blockbytes) = do
                  pure $! HeaderBytes newBytes
 
 
-showDevices :: IO (String -> String)
-showDevices = PP.displayS . PP.renderPretty 1 120 <$> PP.prettyList <$> queryAllOpenCLDevices
+showDevices :: MonadIO m => (Text -> m ()) -> m ()
+showDevices f = do 
+  strF <- liftIO $ PP.displayS . PP.renderPretty 1 120 . PP.prettyList <$> queryAllOpenCLDevices
+  traverse_ f $ TT.splitOn "\n" (T.pack (strF ""))

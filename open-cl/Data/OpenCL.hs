@@ -7,7 +7,11 @@ module Data.OpenCL(
   queryAllOpenCLDevices,
   filterDevices,
   findDevice,
-  fetchDeviceByIndex
+  fetchDeviceByIndex,
+  createOpenCLContext,
+  createOpenCLProgram,
+  buildOpenCLProgram,
+  createOpenCLKernel
 ) where 
 
 
@@ -28,7 +32,8 @@ data OpenCLPlatform = OpenCLPlatform
   }
 
 data OpenCLDevice = OpenCLDevice
-  { deivceId :: CLDeviceID
+  { deviceId :: CLDeviceID
+  , devicePlatformId :: CLPlatformID
   , deviceName :: Text
   , deviceVendor :: Text
   , deviceVersion :: Text
@@ -46,6 +51,33 @@ data OpenCLDevice = OpenCLDevice
   , deviceMaxWorkItemSizes :: [CSize]
   }
 
+instance PP.Pretty OpenCLPlatform where
+  prettyList = pList "Platform"
+  pretty (OpenCLPlatform _ _ version _ _ devices) =
+    text version <> PP.hardline <> PP.prettyList devices <> PP.hardline
+
+
+instance PP.Pretty OpenCLDevice where 
+  prettyList = pList "Device"
+  pretty (OpenCLDevice _ _ name _ _ tpe ava _ addressBits globalMemSize globalCacheSize _ localMemSize maxClock computeUnits workGroupSize itemSize) =
+    text name <> PP.hardline <> 
+      PP.vsep [
+        text "Type:                " <> PP.text (show tpe),
+        text "Bus Width:           " <> integralDoc addressBits, 
+        text "Total Memory:        " <> integralDoc globalMemSize,
+        text "Local Memory:        " <> integralDoc localMemSize,
+        text "Total Cache:         " <> integralDoc globalCacheSize,
+        text "Max Clock Speed:     " <> integralDoc maxClock <> text " MHz",
+        text "Compute Units:       " <> integralDoc computeUnits,
+        text "Max Work Group Size: " <> integralDoc workGroupSize,
+        text "Item sizes:          " <> PP.encloseSep PP.empty PP.empty PP.comma (integralDoc <$> itemSize),
+        text "Status:              " <> available ava
+      ] <> PP.hardline
+   where
+     available :: Bool -> PP.Doc
+     available True = PP.green $ text "Available"
+     available False = PP.red $ text "Unavailable"
+
 buildOpenCLPlatform :: CLPlatformID -> IO OpenCLPlatform
 buildOpenCLPlatform pId = 
  let platformInfo prop = pack <$> clGetPlatformInfo pId prop
@@ -55,11 +87,11 @@ buildOpenCLPlatform pId =
     vendor <- platformInfo CL_PLATFORM_VENDOR
     extensions <- splitOn " " <$> platformInfo CL_PLATFORM_EXTENSIONS
     deviceIds <- clGetDeviceIDs pId CL_DEVICE_TYPE_ALL
-    devices <- traverse buildDevice deviceIds
+    devices <- traverse (buildDevice pId) deviceIds
     pure $ OpenCLPlatform pId name version vendor extensions devices
 
-buildDevice :: CLDeviceID -> IO OpenCLDevice
-buildDevice dId = do 
+buildDevice :: CLPlatformID -> CLDeviceID -> IO OpenCLDevice
+buildDevice pId dId = do 
   name <- pack <$> clGetDeviceName dId 
   version <- pack <$> clGetDeviceVersion dId
   vendor <- pack <$> clGetDeviceVendor dId
@@ -75,7 +107,7 @@ buildDevice dId = do
   computeUnits <- clGetDeviceMaxComputeUnits dId
   workGroupSize <- clGetDeviceMaxWorkGroupSize dId
   itemSize <- clGetDeviceMaxWorkItemSizes dId
-  pure $ OpenCLDevice dId name vendor version tpe available extensions addressBits globalMemSize globalCacheSize cacheLineSize localMemSize maxClock computeUnits workGroupSize itemSize 
+  pure $ OpenCLDevice dId pId name vendor version tpe available extensions addressBits globalMemSize globalCacheSize cacheLineSize localMemSize maxClock computeUnits workGroupSize itemSize 
 
 queryAllOpenCLDevices :: IO [OpenCLPlatform] 
 queryAllOpenCLDevices = do
@@ -108,35 +140,6 @@ text = PP.text <$> unpack
 
 integralDoc :: (Integral a) => a -> PP.Doc 
 integralDoc = PP.integer <$> toInteger
-
-
-
-instance PP.Pretty OpenCLPlatform where
-  prettyList = pList "Platform"
-  pretty (OpenCLPlatform _ _ version _ _ devices) =
-    text version <> PP.hardline <> PP.prettyList devices <> PP.hardline
-
-
-instance PP.Pretty OpenCLDevice where 
-  prettyList = pList "Device"
-  pretty (OpenCLDevice _ name vendor version tpe ava _ addressBits globalMemSize globalCacheSize _ localMemSize maxClock computeUnits workGroupSize itemSize) =
-    (text name <> text " " <> PP.tupled [text vendor, text version]) <> PP.hardline <> PP.vsep [
-        text "Type:                " <> PP.text (show tpe),
-        text "Bus Width:           " <> integralDoc addressBits, 
-        text "Total Memory:        " <> integralDoc globalMemSize,
-        text "Local Memory:        " <> integralDoc localMemSize,
-        text "Total Cache:         " <> integralDoc globalCacheSize,
-        text "Max Clock Speed:     " <> integralDoc maxClock <> text " MHz",
-        text "Compute Units:       " <> integralDoc computeUnits,
-        text "Max Work Group Size: " <> integralDoc workGroupSize,
-        text "Item sizes:          " <> PP.encloseSep PP.empty PP.empty PP.comma (integralDoc <$> itemSize),
-        text "Status:              " <> available ava
-      ] <> PP.hardline
-   where
-     available :: Bool -> PP.Doc
-     available True = PP.green $ text "Available"
-     available False = PP.red $ text "Unavailable"
-
    
 pList :: PP.Pretty a => Text -> [a] -> PP.Doc
 pList prefix as = PP.vsep $ indexedDoc <$> zipped
@@ -145,4 +148,18 @@ pList prefix as = PP.vsep $ indexedDoc <$> zipped
   zipped = L.zip indexes as
   prefixDoc = text prefix
   indexedDoc (idx, a) = prefixDoc <> text " #" <> integralDoc idx <> text " " <> PP.nest 6 (PP.pretty a)
+
+createOpenCLContext :: [OpenCLDevice] -> IO CLContext
+createOpenCLContext devices = clCreateContext (CL_CONTEXT_PLATFORM . devicePlatformId <$> devices) (deviceId <$> devices) putStrLn
+
+createOpenCLProgram :: CLContext -> String -> IO CLProgram
+createOpenCLProgram = clCreateProgramWithSource
+
+buildOpenCLProgram :: CLProgram -> [OpenCLDevice] -> String -> IO CLProgram
+buildOpenCLProgram prog devices args = do
+  clBuildProgram prog (deviceId <$> devices) args 
+  pure prog
+
+createOpenCLKernel :: CLProgram -> String -> IO CLKernel
+createOpenCLKernel = clCreateKernel
 
