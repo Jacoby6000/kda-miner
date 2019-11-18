@@ -20,6 +20,7 @@ import           Data.Generics.Product.Fields (field)
 import           Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import           Data.Tuple.Strict (T2(..), T3(..))
 import           Data.Text.IO
+import           Data.OpenCL
 import           Network.Connection (TLSSettings(..))
 import           Network.HTTP.Client hiding (Proxy(..), responseBody)
 import           Network.HTTP.Client.TLS (mkManagerSettings)
@@ -39,6 +40,7 @@ import           Servant.Client
 import qualified Streaming.Prelude as SP
 import qualified System.Random.MWC as MWC
 import           Text.Printf (printf)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- internal modules
 
@@ -162,7 +164,7 @@ pPred = (\s -> P.Name $ P.BareName s def) <$>
 main :: IO ()
 main = execParser opts >>= \case
     (GPU gpuEnv clientArgs) -> work gpuEnv clientArgs >> exitFailure
-    Devices -> showDevices >>= putStrLn
+    Devices -> showDevices >>= (\f -> putStrLn $ T.pack (f ""))
   where
     opts :: ParserInfo Command
     opts = info (pCommand <**> helper)
@@ -249,14 +251,16 @@ getWork = do
 mining :: WorkBytes -> RIO Env ()
 mining wb = do
     e <- ask 
-    clProgram <- loadProgram $ envGpu e
+    clProgram <- liftIO $ loadProgram (envGpu e)
     race updateSignal (runMiner (envGpu e) tbytes hbytes) >>= traverse_ miningSuccess
     getWork >>= traverse_ mining
   where
     T3 (ChainBytes cbs) tbytes hbytes@(HeaderBytes hbs) = unWorkBytes wb
 
+    ctx :: CLContext
+    ctx = error "not done"
 
-    loadProgram :: GPUEnv -> CLProgram
+    loadProgram :: GPUEnv -> IO CLProgram
     loadProgram env = do
       contents <- readFile $ T.unpack (envKernelPath env)
       clCreateProgramWithSource ctx $ T.unpack contents
@@ -324,9 +328,9 @@ mining wb = do
       when (isLeft res) $ logWarn "Failed to submit new BlockHeader!"
 
 runMiner :: GPUEnv -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
-runMiner t h@(HeaderBytes blockbytes) = do
+runMiner g t h@(HeaderBytes blockbytes) = do
     e <- ask
-    res <- liftIO $ runGPU  t h
+    res <- error "foo"
     case res of
       Left err -> do
           logError . display . T.pack $ "Error running GPU miner: " <> err
@@ -341,14 +345,12 @@ runMiner t h@(HeaderBytes blockbytes) = do
 
           if | not (prop_block_pow bh) -> do
                  logError "Bad nonce returned from GPU!"
-                 runMiner t h
+                 runMiner g t h
              | otherwise -> do
                  modifyIORef' (envHashes e) (+ numNonces)
                  modifyIORef' (envSecs e) (+ secs)
                  pure $! HeaderBytes newBytes
 
-runGPU :: CLContext -> CLProgram -> TargetBytes -> HeaderBytes -> IO (Either String MiningResult)
-runGPU ctx prg (TargetBytes target) (HeaderBytes head) = 
 
-showDevices :: IO Text
-showDevices = pure "Nothing, yet"
+showDevices :: IO (String -> String)
+showDevices = PP.displayS . PP.renderPretty 1 120 <$> PP.prettyList <$> queryAllOpenCLDevices
