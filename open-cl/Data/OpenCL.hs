@@ -11,12 +11,13 @@ module Data.OpenCL(
   createOpenCLContext,
   createOpenCLProgram,
   buildOpenCLProgram,
-  createOpenCLKernel
+  createOpenCLKernel,
+  setUpOpenCLWorkFromSource
 ) where 
 
 
 import           Control.Parallel.OpenCL
-import           Data.Text
+import           Data.Text as T
 import qualified Data.List as L
 import           Foreign.C.Types
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -29,7 +30,7 @@ data OpenCLPlatform = OpenCLPlatform
   , platformVendor :: Text
   , platformExtensions :: [Text]
   , platformDevices :: [OpenCLDevice]
-  }
+  } deriving Show
 
 data OpenCLDevice = OpenCLDevice
   { deviceId :: CLDeviceID
@@ -49,28 +50,34 @@ data OpenCLDevice = OpenCLDevice
   , deviceComputeUnits :: CLuint
   , deviceMaxWorkGroupSize :: CSize
   , deviceMaxWorkItemSizes :: [CSize]
-  }
+  } deriving Show
+
+data OpenCLWork = OpenCLWork
+  { workDevices :: [OpenCLDevice]
+  , workSource :: Text
+  , workProgram :: CLProgram
+  , workKernel :: CLKernel
+  } deriving Show
 
 instance PP.Pretty OpenCLPlatform where
   prettyList = pList "Platform"
   pretty (OpenCLPlatform _ _ version _ _ devices) =
     text version <> PP.hardline <> PP.prettyList devices <> PP.hardline
 
-
 instance PP.Pretty OpenCLDevice where 
   prettyList = pList "Device"
   pretty (OpenCLDevice _ _ name _ _ tpe ava _ addressBits globalMemSize globalCacheSize _ localMemSize maxClock computeUnits workGroupSize itemSize) =
     text name <> PP.hardline <> 
       PP.vsep [
-        text "Type:                " <> PP.text (show tpe),
-        text "Bus Width:           " <> integralDoc addressBits, 
-        text "Total Memory:        " <> integralDoc globalMemSize,
-        text "Local Memory:        " <> integralDoc localMemSize,
-        text "Total Cache:         " <> integralDoc globalCacheSize,
         text "Max Clock Speed:     " <> integralDoc maxClock <> text " MHz",
+        text "Total Memory:        " <> docBytes globalMemSize,
+        text "Local Memory:        " <> docBytes localMemSize,
+        text "Total Cache:         " <> docBytes globalCacheSize,
         text "Compute Units:       " <> integralDoc computeUnits,
         text "Max Work Group Size: " <> integralDoc workGroupSize,
         text "Item sizes:          " <> PP.encloseSep PP.empty PP.empty PP.comma (integralDoc <$> itemSize),
+        text "Address Space:       " <> integralDoc addressBits <> text " Bits", 
+        text "Type:                " <> PP.text (show tpe),
         text "Status:              " <> available ava
       ] <> PP.hardline
    where
@@ -138,6 +145,20 @@ elemAt _ [] = Nothing
 text :: Text -> PP.Doc
 text = PP.text <$> unpack
 
+data ByteMagnitude = B | K | M | G
+
+docBytes :: Integral a => a -> PP.Doc
+docBytes n = reduceBytes (fromIntegral n :: Double) B
+  where 
+    reduceBytes :: Double -> ByteMagnitude -> PP.Doc
+    reduceBytes a B = if a > 1024 then reduceBytes (a / 1024) K else (PP.double . round2) a <> text " B"
+    reduceBytes a K = if a > 1024 then reduceBytes (a / 1024) M else (PP.double . round2) a <> text " KB"
+    reduceBytes a M = if a > 1024 then reduceBytes (a / 1024) G else (PP.double . round2) a <> text " MB"
+    reduceBytes a G = (PP.double . round2) a <> text " GB"
+
+    round2 :: Double -> Double
+    round2 a = fromIntegral (round (a * 100) :: Integer) / 100
+
 integralDoc :: (Integral a) => a -> PP.Doc 
 integralDoc = PP.integer <$> toInteger
    
@@ -147,19 +168,33 @@ pList prefix as = PP.vsep $ indexedDoc <$> zipped
   indexes = L.findIndices (const True) as
   zipped = L.zip indexes as
   prefixDoc = text prefix
-  indexedDoc (idx, a) = prefixDoc <> text " #" <> integralDoc idx <> text " " <> PP.nest 6 (PP.pretty a)
+  numberedDoc idx = prefixDoc <> text " #" <> integralDoc idx
+  nestedDoc a = PP.nest 6 (PP.pretty a)
+  indexedDoc (idx, a) = numberedDoc idx <> text ": " <> nestedDoc a
 
 createOpenCLContext :: [OpenCLDevice] -> IO CLContext
 createOpenCLContext devices = clCreateContext (CL_CONTEXT_PLATFORM . devicePlatformId <$> devices) (deviceId <$> devices) putStrLn
 
-createOpenCLProgram :: CLContext -> String -> IO CLProgram
-createOpenCLProgram = clCreateProgramWithSource
+createOpenCLProgram :: CLContext -> Text -> IO CLProgram
+createOpenCLProgram ctx txt = clCreateProgramWithSource ctx $ unpack txt
 
-buildOpenCLProgram :: CLProgram -> [OpenCLDevice] -> String -> IO CLProgram
+joinArgs :: [Text] -> String
+joinArgs = unpack . T.unwords
+
+
+buildOpenCLProgram :: CLProgram -> [OpenCLDevice] -> [Text] -> IO CLProgram
 buildOpenCLProgram prog devices args = do
-  clBuildProgram prog (deviceId <$> devices) args 
+  clBuildProgram prog (deviceId <$> devices) (joinArgs args)
   pure prog
 
-createOpenCLKernel :: CLProgram -> String -> IO CLKernel
-createOpenCLKernel = clCreateKernel
+createOpenCLKernel :: CLProgram -> Text -> IO CLKernel
+createOpenCLKernel prog name = clCreateKernel prog $ unpack name
+
+setUpOpenCLWorkFromSource :: Text -> [OpenCLDevice] -> [Text] -> Text -> IO OpenCLWork
+setUpOpenCLWorkFromSource source devs args kernelName = do
+  context <- createOpenCLContext devs
+  program <- createOpenCLProgram context source
+  builtProgram <- buildOpenCLProgram program devs args
+  kernel <- createOpenCLKernel builtProgram kernelName
+  pure $ OpenCLWork devs source builtProgram kernel
 
