@@ -10,9 +10,10 @@ module Data.OpenCL(
   fetchDeviceByIndex,
   createOpenCLContext,
   createOpenCLProgram,
-  buildOpenCLProgram,
   createOpenCLKernel,
-  setUpOpenCLWorkFromSource
+  createOpenCLWorkQueue,
+  buildOpenCLProgram,
+  prepareOpenCLWork
 ) where 
 
 
@@ -53,11 +54,21 @@ data OpenCLDevice = OpenCLDevice
   } deriving Show
 
 data OpenCLWork = OpenCLWork
-  { workDevices :: [OpenCLDevice]
-  , workSource :: Text
+  { workQueues :: [OpenCLWorkQueue]
+  , workSource :: ProgramString
   , workProgram :: CLProgram
   , workKernel :: CLKernel
   } deriving Show
+
+data OpenCLWorkQueue = OpenCLWorkQueue
+  { workDevice :: OpenCLDevice
+  , workContext :: CLContext
+  , workqueue :: CLCommandQueue
+  } deriving Show
+
+type ProgramString = Text
+type CompileArgs = [Text]
+type KernelName = Text
 
 instance PP.Pretty OpenCLPlatform where
   prettyList = pList "Platform"
@@ -175,26 +186,29 @@ pList prefix as = PP.vsep $ indexedDoc <$> zipped
 createOpenCLContext :: [OpenCLDevice] -> IO CLContext
 createOpenCLContext devices = clCreateContext (CL_CONTEXT_PLATFORM . devicePlatformId <$> devices) (deviceId <$> devices) putStrLn
 
-createOpenCLProgram :: CLContext -> Text -> IO CLProgram
+createOpenCLProgram :: CLContext -> ProgramString -> IO CLProgram
 createOpenCLProgram ctx txt = clCreateProgramWithSource ctx $ unpack txt
 
 joinArgs :: [Text] -> String
 joinArgs = unpack . T.unwords
 
-
-buildOpenCLProgram :: CLProgram -> [OpenCLDevice] -> [Text] -> IO CLProgram
+buildOpenCLProgram :: CLProgram -> [OpenCLDevice] -> CompileArgs -> IO CLProgram
 buildOpenCLProgram prog devices args = do
   clBuildProgram prog (deviceId <$> devices) (joinArgs args)
   pure prog
 
-createOpenCLKernel :: CLProgram -> Text -> IO CLKernel
+createOpenCLKernel :: CLProgram -> KernelName -> IO CLKernel
 createOpenCLKernel prog name = clCreateKernel prog $ unpack name
 
-setUpOpenCLWorkFromSource :: Text -> [OpenCLDevice] -> [Text] -> Text -> IO OpenCLWork
-setUpOpenCLWorkFromSource source devs args kernelName = do
+createOpenCLWorkQueue :: CLContext -> [CLCommandQueueProperty] -> OpenCLDevice -> IO OpenCLWorkQueue
+createOpenCLWorkQueue ctx props dev = OpenCLWorkQueue dev ctx <$> clCreateCommandQueue ctx (deviceId dev) props
+
+prepareOpenCLWork :: ProgramString -> [OpenCLDevice] -> CompileArgs -> KernelName -> IO OpenCLWork
+prepareOpenCLWork source devs args kernelName = do
   context <- createOpenCLContext devs
   program <- createOpenCLProgram context source
   builtProgram <- buildOpenCLProgram program devs args
   kernel <- createOpenCLKernel builtProgram kernelName
-  pure $ OpenCLWork devs source builtProgram kernel
+  queues <- traverse (createOpenCLWorkQueue context []) devs
+  pure $ OpenCLWork queues source builtProgram kernel
 
