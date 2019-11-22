@@ -8,8 +8,6 @@
 
 #define COMPARE_ALL
 
-#define BLAKE2S_BLOCKBYTES 64
-
 typedef unsigned long  uint64_t;
 typedef signed   long   int64_t;
 typedef unsigned int   uint32_t;
@@ -200,6 +198,91 @@ typedef signed   char    int8_t;
 #define Z9E   D
 #define Z9F   0
 
+#define B02 (*(uint32_t*) (buf + 8))
+#define B03 (*(uint32_t*) (buf + 12))
+#define B04 (*(uint32_t*) (buf + 16))
+#define B05 (*(uint32_t*) (buf + 20))
+#define B06 (*(uint32_t*) (buf + 24))
+#define B07 (*(uint32_t*) (buf + 28))
+#define B08 (*(uint32_t*) (buf + 32))
+#define B09 (*(uint32_t*) (buf + 36))
+#define B0A (*(uint32_t*) (buf + 40))
+#define B0B (*(uint32_t*) (buf + 44))
+#define B0C (*(uint32_t*) (buf + 48))
+#define B0D (*(uint32_t*) (buf + 52))
+#define B0E (*(uint32_t*) (buf + 56))
+#define B0F (*(uint32_t*) (buf + 60))
+#define B10 (*(uint32_t*) (buf + 64))
+#define B11 (*(uint32_t*) (buf + 68))
+#define B12 (*(uint32_t*) (buf + 72))
+#define B13 (*(uint32_t*) (buf + 76))
+#define B14 (*(uint32_t*) (buf + 80))
+#define B15 (*(uint32_t*) (buf + 84))
+#define B16 (*(uint32_t*) (buf + 88))
+#define B17 (*(uint32_t*) (buf + 92))
+#define B18 (*(uint32_t*) (buf + 96))
+#define B19 (*(uint32_t*) (buf + 100))
+#define B1A (*(uint32_t*) (buf + 104))
+#define B1B (*(uint32_t*) (buf + 108))
+#define B1C (*(uint32_t*) (buf + 112))
+#define B1D (*(uint32_t*) (buf + 116))
+#define B1E (*(uint32_t*) (buf + 120))
+#define B1F (*(uint32_t*) (buf + 124))
+#define B20 (*(uint32_t*) (buf + 128))
+#define B21 (*(uint32_t*) (buf + 132))
+#define B22 (*(uint32_t*) (buf + 136))
+#define B23 (*(uint32_t*) (buf + 140))
+#define B24 (*(uint32_t*) (buf + 144))
+#define B25 (*(uint32_t*) (buf + 148))
+#define B26 (*(uint32_t*) (buf + 152))
+#define B27 (*(uint32_t*) (buf + 156))
+#define B28 (*(uint32_t*) (buf + 160))
+#define B29 (*(uint32_t*) (buf + 164))
+#define B2A (*(uint32_t*) (buf + 168))
+#define B2B (*(uint32_t*) (buf + 172))
+#define B2C (*(uint32_t*) (buf + 176))
+#define B2D (*(uint32_t*) (buf + 180))
+#define B2E (*(uint32_t*) (buf + 184))
+#define B2F (*(uint32_t*) (buf + 188))
+#define B30 (*(uint32_t*) (buf + 192))
+#define B31 (*(uint32_t*) (buf + 196))
+#define B32 (*(uint32_t*) (buf + 200))
+#define B33 (*(uint32_t*) (buf + 204))
+#define B34 (*(uint32_t*) (buf + 208))
+#define B35 (*(uint32_t*) (buf + 212))
+#define B36 (*(uint32_t*) (buf + 216))
+#define B37 (*(uint32_t*) (buf + 220))
+#define B38 (*(uint32_t*) (buf + 224))
+#define B39 (*(uint32_t*) (buf + 228))
+#define B3A (*(uint32_t*) (buf + 232))
+#define B3B (*(uint32_t*) (buf + 236))
+#define B3C (*(uint32_t*) (buf + 240))
+#define B3D (*(uint32_t*) (buf + 244))
+#define B3E (*(uint32_t*) (buf + 248))
+#define B3F (*(uint32_t*) (buf + 252))
+#define B40 (*(uint32_t*) (buf + 256))
+#define B41 (*(uint32_t*) (buf + 260))
+#define B42 (*(uint32_t*) (buf + 264))
+#define B43 (*(uint32_t*) (buf + 268))
+#define B44 (*(uint32_t*) (buf + 272))
+#define B45 (*(uint32_t*) (buf + 276))
+#define B46 (*(uint32_t*) (buf + 280))
+#define B47 (*(uint32_t*) (buf + 284))
+#define B48 0x0U
+#define B49 0x0U
+#define B4A 0x0U
+#define B4B 0x0U
+#define B4C 0x0U
+#define B4D 0x0U
+#define B4E 0x0U
+#define B4F 0x0U
+
+#define A0 (*(uint64_t*) (buf + 312))
+#define B0 (*(uint64_t*) (buf + 304))
+#define C0 (*(uint64_t*) (buf + 296))
+#define D0 (*(uint64_t*) (buf + 288))
+
+
 #define Mx(r0, r, i)    Mx_(r0, Z ## r ## i)
 #define Mx_(r0, n)      Mx__(r0, n)
 #define Mx__(r0, n)     Bx(r0, n)
@@ -279,7 +362,7 @@ typedef signed   char    int8_t;
 #endif
 
 
-kernel void search_nonce(uint64_t start_nonce, global uint64_t* result_ptr) {
+kernel void search_nonce(uint64_t start_nonce, __constant uint8_t* buf, global uint64_t* result_ptr) {
   size_t gid = get_global_id(0);
   uint64_t nonce0 = start_nonce + gid * WORKSET_SIZE;
 

@@ -20,16 +20,13 @@ module Miner.OpenCL(
 import           Control.Exception.Safe
 import           Control.Parallel.OpenCL
 import           Control.Concurrent.Async
-import           Data.Bits
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as BSL
-import           Data.Char
 import           Data.Foldable
 import           Data.Text(Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import           Data.Time(diffUTCTime, getCurrentTime)
 import           Data.Tuple.Strict(T2(..))
 import qualified Data.List as L
@@ -37,8 +34,8 @@ import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Storable
 import           Foreign.Marshal.Alloc
+import           Foreign.Marshal.Array
 import           Foreign.Ptr
-import           GHC.Show(intToDigit)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           System.Random
 
@@ -230,80 +227,22 @@ createOpenCLWorkQueue ctx props dev = OpenCLWorkQueue dev <$> clCreateCommandQue
 
 prepareOpenCLWork :: Text -> [OpenCLDevice] -> [Text] -> Text -> IO OpenCLWork
 prepareOpenCLWork source devs args kernelName = do
+  putStrLn "Creating context"
   context <- createOpenCLContext devs
+  putStrLn "Creating program"
   program <- createOpenCLProgram context source
+  putStrLn "Building program"
   builtProgram <- buildOpenCLProgram program devs args
+  putStrLn "Creating kernel"
   kernel <- createOpenCLKernel builtProgram kernelName
+  putStrLn "Creating Work Queue"
   queues <- traverse (createOpenCLWorkQueue context []) devs
+  putStrLn "Creating Buffer"
   resultBuf <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
-  clSetKernelArgSto kernel 1 resultBuf
   pure $ OpenCLWork context queues source builtProgram kernel resultBuf
 
-bsToWord32s :: ByteString -> [Word32]
-bsToWord32s = word32s . BS.unpack
-  where
-  word32s :: [Word8] -> [Word32]
-  word32s [] = []
-  word32s (a:b:c:d:xs) = roll [a,b,c,d] : word32s xs
-  word32s _ = error "input was not possible to split into Word32's"
-
-  roll :: [Word8] -> Word32
-  roll   = foldr unstep 0
-    where
-    unstep b a = a `shiftL` 8 .|. fromIntegral b
-
-bsToWord64s :: ByteString -> [Word64]
-bsToWord64s = word64s . BS.unpack
-  where
-  word64s :: [Word8] -> [Word64]
-  word64s [] = []
-  word64s (a:b:c:d:e:f:g:h:xs) = roll [a,b,c,d,e,f,g,h] : word64s xs
-  word64s _ = error "input was not possible to split into Word64's"
-
-  roll :: [Word8] -> Word64
-  roll   = foldr unstep 0
-    where
-    unstep b a = a `shiftL` 8 .|. fromIntegral b
-
--- | Shows a /non-negative/ 'Integral' number using the base specified by the
--- first argument, and the character representation specified by the second.
-showIntAtBase :: (Integral a, Show a) => a -> (Int -> Char) -> a -> ShowS
-showIntAtBase base toChr n0 r0
-  | base <= 1 = errorWithoutStackTrace ("Numeric.showIntAtBase: applied to unsupported base " ++ show base)
-  | n0 <  0   = errorWithoutStackTrace ("Numeric.showIntAtBase: applied to negative number " ++ show n0)
-  | otherwise = showIt (quotRem n0 base) r0
-   where
-    showIt (n,d) r = seq c $ -- stricter than necessary
-      case n of
-        0 -> r'
-        _ -> showIt (quotRem n base) r'
-     where
-      c  = toChr (fromIntegral d)
-      r' = c : r
-
--- | Show /non-negative/ 'Integral' numbers in base 16.
-showHex :: (Integral a,Show a) => a -> String
-showHex n = toUpper <$> showIntAtBase 16 intToDigit n []
-
-targetBytesToOptions :: Int -> TargetBytes -> HeaderBytes -> [Text]
-targetBytesToOptions wss (TargetBytes (bsToWord64s -> targetHash)) (HeaderBytes (bsToWord32s -> blockData)) =
-  ("-DWORKSET_SIZE=" <> T.pack (show wss)) : blockDataOptions ++ targetHashOptions
-  where
-  blockDataOptions = [0..80-1] >>= \i ->
-    if i == 0 || i == 1 then []
-    else
-        let value =
-                if i < 71 then blockData !! i
-                else 0
-        in [
-            "-DB" <> T.pack (show (i`div`16)) <> T.pack (showHex (i `mod` 16)) <> "=" <> T.pack (show value) <> "U"
-           ]
-  targetHashOptions = [0..4-1] >>= \i ->
-    let j = chr $ ord 'A' + (3 - i)
-    in [T.snoc "-D" j <> "0=" <> T.pack (show (targetHash !! i)) <> "UL"]
-
 run :: GPUEnv -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
-run cfg target header work genNonce = do
+run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   startTime <- getCurrentTime
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
@@ -320,10 +259,12 @@ run cfg target header work genNonce = do
   free offsetP
   free resP
   pure result
-  where
-  doIt offsetP resP work@(OpenCLWork _ [queue] _ _ kernel resultBuf) !n = do
+ where
+  doIt offsetP resP w@(OpenCLWork _ [queue] _ _ kernel resultBuf) !n = do
     nonce <- genNonce
+    buf <- newArray $ BS.unpack (BS.append (pad 288 header) target)
     clSetKernelArgSto kernel 0 nonce
+    clSetKernelArgSto kernel 1 buf
     e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) []
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
     e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) [e2]
@@ -332,10 +273,15 @@ run cfg target header work genNonce = do
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
     if res == 0 then 
-      doIt offsetP resP work (n+1)
+      doIt offsetP resP w (n+1)
     else 
       return $ T2 res n
   doIt _ _ _ _ = error "using multiple devices at once is unsupported"
+
+  pad :: Int -> ByteString -> ByteString
+  pad desiredLength bs = 
+    let missingLen = desiredLength - BS.length bs
+     in BS.append bs (BS.replicate missingLen 0)
 
 openCLMiner :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO MiningResult
 openCLMiner cfg works t h = do
