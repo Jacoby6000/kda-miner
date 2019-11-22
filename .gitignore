@@ -1,2 +1,5 @@
 *.lock
 .stack-work
+.ghc*
+dist
+dist-newstyle

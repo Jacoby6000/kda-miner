@@ -10,12 +10,16 @@ module Miner.OpenCL(
   openCLMiner,
   filterDevices,
   findDevice,
+  prepareOpenCLWork,
+  releaseWork,
   OpenCLPlatform(..),
-  OpenCLDevice(..)
+  OpenCLDevice(..),
+  OpenCLWork(..)
 ) where
 
 import           Control.Exception.Safe
 import           Control.Parallel.OpenCL
+import           Control.Concurrent.Async
 import           Data.Bits
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
@@ -147,6 +151,15 @@ queryAllOpenCLDevices = do
   platformIds <- clGetPlatformIDs
   traverse buildOpenCLPlatform platformIds
 
+releaseWork :: OpenCLWork -> IO Bool
+releaseWork w = do
+  obj <- clReleaseMemObject $ workResultBuf w
+  kern <- clReleaseKernel $ workKernel w
+  prog <- clReleaseProgram $ workProgram w
+  queues <- traverse clReleaseCommandQueue (workQueue <$> workQueues w)
+  ctx <- clReleaseContext (workContext w)
+  pure (obj && kern && prog && ctx && and queues)
+
 text :: Text -> PP.Doc
 text = PP.text <$> T.unpack
 
@@ -222,7 +235,7 @@ prepareOpenCLWork source devs args kernelName = do
   builtProgram <- buildOpenCLProgram program devs args
   kernel <- createOpenCLKernel builtProgram kernelName
   queues <- traverse (createOpenCLWorkQueue context []) devs
-  resultBuf <- clCreateBuffer context [CL_MEM_WRITE_ONLY] ((8::Int),nullPtr)
+  resultBuf <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
   clSetKernelArgSto kernel 1 resultBuf
   pure $ OpenCLWork context queues source builtProgram kernel resultBuf
 
@@ -289,15 +302,12 @@ targetBytesToOptions wss (TargetBytes (bsToWord64s -> targetHash)) (HeaderBytes 
     let j = chr $ ord 'A' + (3 - i)
     in [T.snoc "-D" j <> "0=" <> T.pack (show (targetHash !! i)) <> "UL"]
 
-run :: GPUEnv -> TargetBytes -> HeaderBytes -> Text -> [OpenCLDevice] -> IO Word64 -> IO MiningResult
-run cfg target header src devices genNonce = do
+run :: GPUEnv -> TargetBytes -> HeaderBytes -> Text -> OpenCLWork -> IO Word64 -> IO MiningResult
+run cfg target header src work genNonce = do
   startTime <- getCurrentTime
-  let !args = targetBytesToOptions (workSetSize cfg) target header
-  let kernelName = "search_nonce"
-  work <- prepareOpenCLWork src devices args kernelName
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
-  !(T2 end steps) <- doIt offsetP resP work (1::Int)
+  (T2 end steps) <- doIt offsetP resP work (1::Int)
   endTime <- getCurrentTime
   let numNonces = globalSize cfg * 64 * steps
   let !result = MiningResult
@@ -305,32 +315,31 @@ run cfg target header src devices genNonce = do
         (fromIntegral numNonces)
         (fromIntegral numNonces `div` max 1 (round (endTime `diffUTCTime` startTime)))
         mempty
-  _ <- clReleaseMemObject (workResultBuf work)
-  _ <- clReleaseKernel (workKernel work)
-  _ <- clReleaseProgram (workProgram work)
   traverse_ clReleaseCommandQueue (workQueue <$> workQueues work)
   _ <- clReleaseContext (workContext work)
   free offsetP
   free resP
   pure result
   where
-  doIt offsetP resP !work@(OpenCLWork _ [queue] _ _ kernel resultBuf) !n = do
-        nonce <- genNonce
-        clSetKernelArgSto kernel 0 nonce
-        e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) []
-        e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
-        e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) [e2]
-        _ <- clFinish (workQueue queue)
-        -- required to avoid leaking everything else
-        traverse_ clReleaseEvent [e1,e2,e3]
-        !res <- peek resP
-        if res == 0 then do
-          doIt offsetP resP work (n+1)
-        else do
-          return $ T2 res n
-  doIt _ _ _ _ = error "using multiple devices at once is currently unsupported"
+  doIt offsetP resP work@(OpenCLWork _ [queue] _ _ kernel resultBuf) !n = do
+    nonce <- genNonce
+    clSetKernelArgSto kernel 0 nonce
+    e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) []
+    e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
+    e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) [e2]
+    _ <- clWaitForEvents [e3]
+    -- required to avoid leaking everything else
+    traverse_ clReleaseEvent [e1,e2,e3]
+    !res <- peek resP
+    if res == 0 then 
+      doIt offsetP resP work (n+1)
+    else 
+      return $ T2 res n
+  doIt _ _ _ _ = error "using multiple devices at once is unsupported"
 
-openCLMiner :: GPUEnv -> [OpenCLDevice] -> TargetBytes -> HeaderBytes -> IO MiningResult
-openCLMiner cfg devices t h = do
+openCLMiner :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO MiningResult
+openCLMiner cfg works t h = do
   src <- T.readFile "kernels/kernel.cl"
-  run cfg t h src devices randomIO
+  runningDevs <- traverse (\device -> async $ run cfg t h src device randomIO) works
+  results <- waitAny runningDevs
+  pure $ snd results

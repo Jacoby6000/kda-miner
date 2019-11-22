@@ -72,3 +72,4 @@ executable kda-miner
     , safe-exceptions ^>= 0.1.7.0
     , errors >= 2.3.0
     , split >= 0.2.3
+    , async >= 2.2.2

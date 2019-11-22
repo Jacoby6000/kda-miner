@@ -288,9 +288,11 @@ miningLoop updateMap inner = mask go
 
 opencl :: GPUEnv -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
 opencl oce t h@(HeaderBytes blockbytes) = do
-    platforms <- liftIO $ queryAllOpenCLDevices
+    platforms <- liftIO queryAllOpenCLDevices
     devices <- traverse (validateDevice platforms) $ gpuDevices oce    
-    loop devices
+    kernelSource <- RIO.readFileUtf8 "kernels/kernel.cl"
+    works <- liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d ["-Werror", "-DWORKSET_SIZE " <> T.pack (show (workSetSize oce))] "search_nonce") [devices]
+    loop works <* liftIO (traverse releaseWork works)
  where
 
   validateDevice :: [OpenCLPlatform] -> GPUDevice -> RIO Env OpenCLDevice
@@ -316,10 +318,13 @@ opencl oce t h@(HeaderBytes blockbytes) = do
 
     pure $ devices !! dIndex
 
-  loop :: [OpenCLDevice] -> RIO Env HeaderBytes
-  loop device = do
+  -- let !args = targetBytesToOptions (workSetSize cfg) target header
+  -- let kernelName = "search_nonce"
+  -- work <- prepareOpenCLWork src [device] args kernelName
+  loop :: [OpenCLWork] -> RIO Env HeaderBytes
+  loop works = do
       e <- ask
-      res <- try $ liftIO $ openCLMiner oce device t h
+      res <- try $ liftIO $ openCLMiner oce works t h
       case res of
           Left (err :: SomeException) -> do
               logError . display . T.pack $ "Error running OpenCL miner: " <> show err
@@ -334,7 +339,7 @@ opencl oce t h@(HeaderBytes blockbytes) = do
 
               if | not (prop_block_pow bh) -> do
                       logError "Bad nonce returned from OpenCL miner!"
-                      loop device
+                      loop works
                   | otherwise -> do
                       modifyIORef' (envHashes e) (+ numNonces)
                       modifyIORef' (envSecs e) (+ secs)
