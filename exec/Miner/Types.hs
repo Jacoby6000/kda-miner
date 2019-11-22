@@ -94,9 +94,10 @@ pClientArgs = ClientArgs <$> pLog <*> some pUrl <*> pMiner <*> pChainId
 
 pCommand :: Parser Command
 pCommand = hsubparser
-    (  command "opencl" (info gpuOpts (progDesc "Perform GPU mining"))
+    (  command "opencl" (info gpuOpts (progDesc "Perform mining"))
     <> command "keys" (info (Otherwise <$> keysOpts) (progDesc "Generate public/private key pair"))
     <> command "balance" (info (Otherwise <$> balancesOpts) (progDesc "Get balances on all chains"))
+    <> command "show-devices" (info (Otherwise <$> showDevicesOpts) (progDesc "Show all available OpenCL Devices"))
     )
 
 pGpuEnv :: Parser GPUEnv
@@ -190,10 +191,13 @@ pPred = (\s -> P.Name $ P.BareName s def) <$>
     strOption (long "miner-pred" <> value "keys-all" <> help "Keyset predicate")
 
 data OtherCommand =
-  Keys | Balance BaseUrl Text
+  ShowDevices | Keys | Balance BaseUrl Text
 
 keysOpts :: Parser OtherCommand
 keysOpts = pure Keys
+
+showDevicesOpts :: Parser OtherCommand
+showDevicesOpts = pure ShowDevices
 
 balancesOpts :: Parser OtherCommand
 balancesOpts = Balance <$> pUrl <*> pMinerName

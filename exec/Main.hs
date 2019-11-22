@@ -94,6 +94,7 @@ import           Miner.Types
 import           Miner.Updates
 import qualified Pact.Types.Crypto as P hiding (PublicKey)
 import qualified Pact.Types.Util as P
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 --------------------------------------------------------------------------------
 -- Work
@@ -101,6 +102,7 @@ import qualified Pact.Types.Util as P
 main :: IO ()
 main = execParser opts >>= \case
     cmd@(GPU _ cargs) -> work cmd cargs >> exitFailure
+    Otherwise ShowDevices -> PP.putDoc =<< PP.prettyList <$> queryAllOpenCLDevices
     Otherwise Keys -> genKeys
     Otherwise (Balance url account) -> getBalances url account
   where
