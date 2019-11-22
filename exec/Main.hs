@@ -136,14 +136,47 @@ getInfo m url = fmap nodeVersion <$> runClientM (client (Proxy @NodeInfoApi)) ce
 
 run :: RIO Env ()
 run = do
-    env <- ask
     logInfo "Starting Miner."
-    mining (scheme env)
+    s <- scheme
+    mining s
 
-scheme :: Env -> (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
-scheme env = case envCmd env of
-    GPU e _ -> opencl e
+scheme :: RIO Env (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
+scheme = do
+  env <- ask 
+  case envCmd env of
+    GPU e _ -> opencl e <$> setUpOpenCL e 
     _       -> error "Impossible: You shouldn't reach this case."
+
+setUpOpenCL :: GPUEnv -> RIO Env [OpenCLWork]
+setUpOpenCL oce = do
+    platforms <- liftIO queryAllOpenCLDevices
+    devices <- traverse (validateDevice platforms) $ gpuDevices oce    
+    kernelSource <- RIO.readFileUtf8 "kernels/kernel.cl"
+    liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d ["-Werror", "-DWORKSET_SIZE " <> T.pack (show (workSetSize oce))] "search_nonce") [devices]
+ where
+
+  validateDevice :: [OpenCLPlatform] -> GPUDevice -> RIO Env OpenCLDevice
+  validateDevice platforms dev = do
+    let pIndex = platformIndex dev
+    let platformCount = length platforms
+    when (pIndex >= platformCount) $ do
+        logError . display . T.pack $
+            "Selected platform index " <> show pIndex
+         <> " but there are only " <> show platforms <> " of them."
+        exitFailure
+
+    let platform = platforms !! pIndex
+
+    let devices = platformDevices platform
+    let dIndex = deviceIndex dev
+    let deviceCount = length devices
+    when (deviceIndex dev >= deviceCount) $ do
+        logError . display . T.pack $
+            "Selected device index " <> show (deviceIndex dev) 
+         <> " but there are only " <> show (length devices) <> " of them on the selected platform."
+        exitFailure
+
+    pure $ devices !! dIndex
 
 genKeys :: IO ()
 genKeys = do
@@ -296,43 +329,11 @@ miningLoop updateMap inner = mask go
           where
             T3 cbytes _ hbytes = unWorkBytes w
 
-opencl :: GPUEnv -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
-opencl oce t h@(HeaderBytes blockbytes) = do
-    platforms <- liftIO queryAllOpenCLDevices
-    devices <- traverse (validateDevice platforms) $ gpuDevices oce    
-    kernelSource <- RIO.readFileUtf8 "kernels/kernel.cl"
-    works <- liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d ["-Werror", "-DWORKSET_SIZE " <> T.pack (show (workSetSize oce))] "search_nonce") [devices]
-    loop works <* liftIO (traverse releaseWork works)
+opencl :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
+opencl oce works t h@(HeaderBytes blockbytes) = loop <* liftIO (traverse releaseWork works)
  where
-
-  validateDevice :: [OpenCLPlatform] -> GPUDevice -> RIO Env OpenCLDevice
-  validateDevice platforms dev = do
-    let pIndex = platformIndex dev
-    let platformCount = length platforms
-    when (pIndex >= platformCount) $ do
-        logError . display . T.pack $
-            "Selected platform index " <> show pIndex
-         <> " but there are only " <> show platforms <> " of them."
-        exitFailure
-
-    let platform = platforms !! pIndex
-
-    let devices = platformDevices platform
-    let dIndex = deviceIndex dev
-    let deviceCount = length devices
-    when (deviceIndex dev >= deviceCount) $ do
-        logError . display . T.pack $
-            "Selected device index " <> show (deviceIndex dev) 
-         <> " but there are only " <> show (length devices) <> " of them on the selected platform."
-        exitFailure
-
-    pure $ devices !! dIndex
-
-  -- let !args = targetBytesToOptions (workSetSize cfg) target header
-  -- let kernelName = "search_nonce"
-  -- work <- prepareOpenCLWork src [device] args kernelName
-  loop :: [OpenCLWork] -> RIO Env HeaderBytes
-  loop works = do
+  loop :: RIO Env HeaderBytes
+  loop = do
       e <- ask
       res <- try $ liftIO $ openCLMiner oce works t h
       case res of
@@ -349,7 +350,7 @@ opencl oce t h@(HeaderBytes blockbytes) = do
 
               if | not (prop_block_pow bh) -> do
                       logError "Bad nonce returned from OpenCL miner!"
-                      loop works
+                      loop
                   | otherwise -> do
                       modifyIORef' (envHashes e) (+ numNonces)
                       modifyIORef' (envSecs e) (+ secs)

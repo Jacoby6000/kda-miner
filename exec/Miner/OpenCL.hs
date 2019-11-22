@@ -302,8 +302,8 @@ targetBytesToOptions wss (TargetBytes (bsToWord64s -> targetHash)) (HeaderBytes 
     let j = chr $ ord 'A' + (3 - i)
     in [T.snoc "-D" j <> "0=" <> T.pack (show (targetHash !! i)) <> "UL"]
 
-run :: GPUEnv -> TargetBytes -> HeaderBytes -> Text -> OpenCLWork -> IO Word64 -> IO MiningResult
-run cfg target header src work genNonce = do
+run :: GPUEnv -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
+run cfg target header work genNonce = do
   startTime <- getCurrentTime
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
@@ -339,7 +339,6 @@ run cfg target header src work genNonce = do
 
 openCLMiner :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO MiningResult
 openCLMiner cfg works t h = do
-  src <- T.readFile "kernels/kernel.cl"
-  runningDevs <- traverse (\device -> async $ run cfg t h src device randomIO) works
+  runningDevs <- traverse (\device -> async $ run cfg t h device randomIO) works
   results <- waitAny runningDevs
   pure $ snd results
