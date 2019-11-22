@@ -1,9 +1,9 @@
 #if __ENDIAN_LITTLE__
-# define NATIVE_LITTLE_ENDIAN 1
+ #define NATIVE_LITTLE_ENDIAN 1
 #endif
 
 #if __LITTLE_ENDIAN__
-# define NATIVE_LITTLE_ENDIAN 1
+ #define NATIVE_LITTLE_ENDIAN 1
 #endif
 
 #define COMPARE_ALL
@@ -218,7 +218,7 @@ typedef signed   char    int8_t;
   } while (0)
 
 
-#define ROUND(r0, r)                               \ 
+#define ROUND(r0, r)                               \
   do {                                             \
     G(Mx(r0, r, 0), Mx(r0, r, 1), V0, V4, V8, VC); \
     G(Mx(r0, r, 2), Mx(r0, r, 3), V1, V5, V9, VD); \

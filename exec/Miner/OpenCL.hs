@@ -287,7 +287,7 @@ targetBytesToOptions wss (TargetBytes (bsToWord64s -> targetHash)) (HeaderBytes 
            ]
   targetHashOptions = [0..4-1] >>= \i ->
     let j = chr $ ord 'A' + (3 - i)
-    in ["-D" <> T.pack (show j) <> "0=" <> T.pack (show (targetHash !! i)) <> "UL"]
+    in [T.snoc "-D" j <> "0=" <> T.pack (show (targetHash !! i)) <> "UL"]
 
 run :: GPUEnv -> TargetBytes -> HeaderBytes -> Text -> [OpenCLDevice] -> IO Word64 -> IO MiningResult
 run cfg target header src devices genNonce = do
