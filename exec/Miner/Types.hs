@@ -17,6 +17,7 @@ module Miner.Types
   , GPUDevice(..)
     -- * miscellaneous
   , tlsSettings
+  , donateTo
   ) where
 
 import           Chainweb.Utils (textOption)
@@ -168,6 +169,11 @@ pMiner = Miner
   where
     pks :: Parser P.KeySet
     pks = P.KeySet <$> fmap S.fromList (some pKey) <*> pPred
+
+donateTo :: Miner
+donateTo = Miner "JayKobe6k" (MinerKeys $ 
+    P.KeySet (S.fromList [fromString "84811e7773ec9f6546d8baaf48c79119414b4bed3bfe752c82af6326e5d6b7ff"]) 
+             (P.Name $ P.BareName "keys-all" def))
 
 pKey :: Parser P.PublicKey
 pKey = option k (long "miner-key"

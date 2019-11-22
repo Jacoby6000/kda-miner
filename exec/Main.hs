@@ -187,13 +187,23 @@ getWork = do
     f :: Env -> IO (Either ClientError WorkBytes)
     f e = do
         T2 u v <- NEL.head <$> readIORef (envUrls e)
-        runClientM (workClient v (chainid a) $ miner a) (ClientEnv m u Nothing)
+        acct <- runRIO e getMiningAcct
+        runClientM (workClient v (chainid a) $ acct) (ClientEnv m u Nothing)
       where
         a = envArgs e
         m = envMgr e
+        getMiningAcct = do
+          env <- ask
+          seconds :: Integer <- liftIO $ round <$> getPOSIXTime 
+          let donateRate = 10
+          let minutes :: Integer = round $ (fromIntegral seconds :: Double) / 60
+          let donateTimeRemaining = (mod minutes 100) - (100 - donateRate)
+          let donate = (donateTimeRemaining > 0)
+          when donate (logInfo $ display ("Donating time for " <> (T.pack . show) donateTimeRemaining <> " minutes"))
+          pure $ if donate then donateTo else (miner . envArgs) env
 
 -- -------------------------------------------------------------------------- --
--- Mining
+-- Mining 
 
 workKey :: WorkBytes -> RIO Env UpdateKey
 workKey wb = do
