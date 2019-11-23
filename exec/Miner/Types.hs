@@ -117,7 +117,7 @@ pWorkSetSize = textOption
 
 pDevice :: Parser GPUDevice
 pDevice = option parseDevice (
-  short 'd' <> long "device" <> help "Devices are specified in the format 'x,y' where x is the platform ID, and y is the device ID.")
+  short 'd' <> long "device" <> help "Devices are specified in the format 'x,y' where x is the platform ID, and y is the device ID. If no devices are specified, all GPUs will be used.")
  where
   parseDevice :: ReadM GPUDevice
   parseDevice = eitherReader $ \s -> do 

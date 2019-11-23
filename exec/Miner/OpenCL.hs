@@ -119,7 +119,7 @@ buildOpenCLPlatform pId = do
     version <- platformInfo CL_PLATFORM_VERSION
     vendor <- platformInfo CL_PLATFORM_VENDOR
     extensions <- T.splitOn " " <$> platformInfo CL_PLATFORM_EXTENSIONS
-    deviceIds <- clGetDeviceIDs pId CL_DEVICE_TYPE_ALL
+    deviceIds <- clGetDeviceIDs pId CL_DEVICE_TYPE_GPU 
     devices <- traverse (buildDevice pId) deviceIds
     pure $ OpenCLPlatform pId name version vendor extensions devices
     where
