@@ -259,6 +259,7 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   free offsetP
   free resP
   free bufArr
+  free inBuf
   pure result
  where
   doIt offsetP resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) !n = do
