@@ -295,13 +295,11 @@ miningLoop updateMap inner = mask go
       let hashTotals = (* nonceStepSize) . fromIntegral <$> stepTotals
       traverse_ (\(idx, hash) -> logHashRate idx seconds hash) (zip (L.findIndices (const True) hashTotals) hashTotals)
 
-    logHashRate :: Int -> Double -> Int -> RIO Env ()
+    logHashRate :: Int -> Double -> Integer -> RIO Env ()
     logHashRate idx secs hashes = 
       let rate = fromIntegral hashes / max 1 secs / 1000000
        in when (rate > 0) $ logInfo . display . T.pack $
               printf "GPU #%d: %.2f MH/s" idx rate
-
-
 
     go :: (RIO Env () -> RIO Env a) -> RIO Env ()
     go umask = (forever (umask loopBody) `catches` handlers) >>= \case
@@ -336,7 +334,7 @@ miningLoop updateMap inner = mask go
         handleResult w res
       where
         handleResult w (Right a) = miningSuccess w a
-        handleResult w (Left ()) = logDebug "Mining loop was preempted. Getting updated work ..."
+        handleResult _ (Left ()) = logDebug "Mining loop was preempted. Getting updated work ..."
 
         -- | If the `go` call won the `race`, this function yields the result back
         -- to some "mining coordinator" (likely a chainweb-node).
