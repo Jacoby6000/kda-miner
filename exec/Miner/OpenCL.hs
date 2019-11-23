@@ -243,6 +243,7 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
   let bufBytes = BS.unpack $ BS.append (pad 288 header) target
+  -- bufArrMem <- callocBytes 320 :: IO (Ptr Word8)
   bufArr <- newArray bufBytes
   !inBuf <- workPrepareInputBuf work 320 (castPtr bufArr)
   (T2 end steps) <- doIt offsetP resP inBuf bufArr work (1::Int)
@@ -264,6 +265,7 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
     nonce <- genNonce
     clSetKernelArgSto kernel 0 nonce
     clSetKernelArgSto kernel 1 inBuf
+    clSetKernelArgSto kernel 2 resultBuf
     e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) []
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
     e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) [e2]
