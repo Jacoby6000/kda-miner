@@ -15,9 +15,12 @@ module Miner.Types
   , GPUEnv(..)
   , OtherCommand(..)
   , GPUDevice(..)
+  , Magnitude(..)
     -- * miscellaneous
   , tlsSettings
   , donateTo
+  , reduceMag
+  , showT
   ) where
 
 import           Chainweb.Utils (textOption)
@@ -25,6 +28,7 @@ import           Data.Default (def)
 import           Data.Generics.Product.Fields (field)
 import           Data.List
 import           Data.List.Split
+import qualified Data.Text as T
 import           Data.Time.Clock.POSIX (POSIXTime)
 import           Data.Tuple.Strict (T2(..))
 import           Network.Connection
@@ -49,7 +53,7 @@ data Env = Env
     { envGen         :: !MWC.GenIO
     , envMgr         :: !Manager
     , envLog         :: !LogFunc
-    , envCmd         :: !Command
+    , envGpu         :: !GPUEnv
     , envArgs        :: !ClientArgs
     , envHashes      :: IORef Word64
     , envSecs        :: IORef Word64
@@ -204,6 +208,20 @@ balancesOpts = Balance <$> pUrl <*> pMinerName
   where
     pMinerName =
       textOption (long "miner-account" <> help "Coin Contract account name of Miner")
+
+data Magnitude = B | K | M | G deriving (Eq, Show)
+   
+showT :: Show a => a -> Text
+showT = T.pack . show
+
+reduceMag :: Magnitude -> Magnitude -> Double -> Text
+reduceMag B mx a = if a > 1024 && mx /= B then reduceMag K mx (a / 1024) else (showT . round2) a <> " "
+reduceMag K mx a = if a > 1024 && mx /= K then reduceMag M mx (a / 1024) else (showT . round2) a <> " K"
+reduceMag M mx a = if a > 1024 && mx /= M then reduceMag G mx (a / 1024) else (showT . round2) a <> " M"
+reduceMag G _ a = (showT . round2) a <> " G"
+
+round2 :: Double -> Double
+round2 a = fromIntegral (round (a * 100) :: Integer) / 100
 
 tlsSettings :: TLSSettings
 tlsSettings = TLSSettingsSimple True True True

@@ -61,8 +61,10 @@
 
 module Main ( main ) where
 
+import           Miner.Kernel
 import           Control.Retry
 import           Data.Time.Clock.POSIX (getPOSIXTime)
+import qualified Data.List as L
 import           Data.Tuple.Strict (T2(..), T3(..))
 import           Network.HTTP.Client hiding (Proxy(..), responseBody)
 import           Network.HTTP.Client.TLS (mkManagerSettings)
@@ -101,7 +103,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 main :: IO ()
 main = execParser opts >>= \case
-    cmd@(GPU _ cargs) -> work cmd cargs >> exitFailure
+    GPU env cargs -> work env cargs >> exitFailure
     Otherwise ShowDevices -> PP.putDoc =<< PP.prettyList <$> queryAllOpenCLDevices
     Otherwise Keys -> genKeys
     Otherwise (Balance url account) -> getBalances url account
@@ -110,7 +112,7 @@ main = execParser opts >>= \case
     opts = info (pCommand <**> helper)
         (fullDesc <> progDesc "The Official Chainweb Mining Client")
 
-work :: Command -> ClientArgs -> IO ()
+work :: GPUEnv -> ClientArgs -> IO ()
 work cmd cargs = do
     lopts <- setLogMinLevel (ll cargs) . setLogUseLoc False <$> logOptionsHandle stderr True
     withLogFunc lopts $ \logFunc -> do
@@ -139,22 +141,22 @@ getInfo m url = fmap nodeVersion <$> runClientM (client (Proxy @NodeInfoApi)) ce
 run :: RIO Env ()
 run = do
     logInfo "Starting Miner."
-    s <- scheme
-    mining s
+    (mvs, s) <- scheme
+    mining mvs s
 
-scheme :: RIO Env (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
+scheme :: RIO Env ([MVar Int], TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
 scheme = do
   env <- ask 
-  case envCmd env of
-    GPU e _ -> opencl e <$> setUpOpenCL e 
-    _       -> error "Impossible: You shouldn't reach this case."
+  let e = envGpu env
+  mvs <- liftIO $ traverse (const newEmptyMVar) (gpuDevices e)
+  oclWork <- opencl e mvs <$> setUpOpenCL e
+  pure (mvs, oclWork)
 
 setUpOpenCL :: GPUEnv -> RIO Env [OpenCLWork]
 setUpOpenCL oce = do
     platforms <- liftIO queryAllOpenCLDevices
     devices <- fetchDevices platforms $ gpuDevices oce
-    kernelSource <- RIO.readFileUtf8 "kernels/kernel.cl"
-    liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d [wss] "search_nonce") [devices]
+    liftIO $ traverse (\d -> prepareOpenCLWork kernel d [wss] "search_nonce") [devices]
  where
   wss :: Text
   wss = T.pack $ "-DWORKSET_SIZE=" <> show (workSetSize oce)
@@ -264,10 +266,10 @@ workKey wb = do
 -- TODO: use exponential backoff instead of fixed delay when retrying.
 -- (restart retry sequence when the maximum retry count it reached)
 --
-mining :: (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes) -> RIO Env ()
-mining go = do
+mining :: [MVar Int] -> (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes) -> RIO Env ()
+mining mvs go = do
     updateMap <- newUpdateMap -- TODO use a bracket
-    miningLoop updateMap go `finally` logInfo "Miner halted."
+    miningLoop updateMap mvs go `finally` logInfo "Miner halted."
 
 data Recovery = Irrecoverable | Recoverable
 
@@ -284,9 +286,20 @@ data Recovery = Irrecoverable | Recoverable
 -- TODO: add rate limiting for failures and raise an error if the function fails
 -- at an higher rate.
 --
-miningLoop :: UpdateMap -> (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes) -> RIO Env ()
-miningLoop updateMap inner = mask go
+miningLoop ::  UpdateMap -> [MVar Int] -> (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes) -> RIO Env ()
+miningLoop updateMap mvs inner = mask go
   where
+    logHashRate :: Double -> RIO Env ()
+    logHashRate seconds = do
+      cfg <- envGpu <$> ask
+      steps <- liftIO $ traverse readMVar mvs
+      let hashes = (*) (globalSize cfg * workSetSize cfg) <$> steps
+      let rates = (/seconds) . fromIntegral <$> hashes
+      let textRates = reduceMag B M <$> rates
+      let toStr (idx, rate) = "GPU #" <> showT idx <> ": " <> rate <> "H/s"
+      traverse_ (logInfo . display . toStr) $ zip (L.findIndices (const True) textRates) textRates
+
+
     go :: (RIO Env () -> RIO Env a) -> RIO Env ()
     go umask = (forever (umask loopBody) `catches` handlers) >>= \case
         Irrecoverable -> pure ()
@@ -302,6 +315,7 @@ miningLoop updateMap inner = mask go
 
     loopBody :: RIO Env ()
     loopBody = do
+        startTime <- liftIO getPOSIXTime
         w <- getWork >>= \case
             Nothing -> exitFailure
             Just x -> return x
@@ -311,7 +325,10 @@ miningLoop updateMap inner = mask go
         logDebug . display . T.pack $ printf "Chain %d: Start mining on new work item." cid
         withPreemption updateMap updateKey (inner tbytes hbytes) >>= \case
             Right a -> miningSuccess w a
-            Left () -> logDebug "Mining loop was preempted. Getting updated work ..."
+            Left () -> do
+              now <- liftIO getPOSIXTime 
+              logHashRate $ fromIntegral (round ((now - startTime) * 1000000)) / 1000000
+              logDebug "Mining loop was preempted. Getting updated work ..."
       where
         -- | If the `go` call won the `race`, this function yields the result back
         -- to some "mining coordinator" (likely a chainweb-node).
@@ -337,13 +354,13 @@ miningLoop updateMap inner = mask go
           where
             T3 cbytes _ hbytes = unWorkBytes w
 
-opencl :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
-opencl oce works t h@(HeaderBytes blockbytes) = loop <* liftIO (traverse releaseWork works)
+opencl :: GPUEnv -> [MVar Int] -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
+opencl oce mvs works t h@(HeaderBytes blockbytes) = loop <* liftIO (traverse releaseWork works)
  where
   loop :: RIO Env HeaderBytes
   loop = do
       e <- ask
-      res <- try $ liftIO $ openCLMiner oce works t h
+      res <- try $ liftIO $ openCLMiner oce (zip mvs works) t h
       case res of
           Left (err :: SomeException) -> do
               logError . display . T.pack $ "Error running OpenCL miner: " <> show err

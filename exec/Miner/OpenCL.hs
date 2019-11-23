@@ -20,6 +20,7 @@ module Miner.OpenCL(
 import           Control.Exception.Safe
 import           Control.Parallel.OpenCL
 import           Control.Concurrent.Async
+import           Control.Concurrent.MVar
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BSB
@@ -41,7 +42,7 @@ import           System.Random
 
 import           Chainweb.Miner.Core
 
-import           Miner.Types(GPUEnv(..))
+import           Miner.Types(GPUEnv(..), Magnitude(..), reduceMag)
 
 data OpenCLPlatform = OpenCLPlatform
   { platformId :: !CLPlatformID
@@ -161,19 +162,8 @@ releaseWork w = do
 text :: Text -> PP.Doc
 text = PP.text <$> T.unpack
 
-data ByteMagnitude = B | K | M | G
-
 docBytes :: Integral a => a -> PP.Doc
-docBytes n = reduceBytes (fromIntegral n :: Double) B
-  where
-    reduceBytes :: Double -> ByteMagnitude -> PP.Doc
-    reduceBytes a B = if a > 1024 then reduceBytes (a / 1024) K else (PP.double . round2) a <> text " B"
-    reduceBytes a K = if a > 1024 then reduceBytes (a / 1024) M else (PP.double . round2) a <> text " KB"
-    reduceBytes a M = if a > 1024 then reduceBytes (a / 1024) G else (PP.double . round2) a <> text " MB"
-    reduceBytes a G = (PP.double . round2) a <> text " GB"
-
-    round2 :: Double -> Double
-    round2 a = fromIntegral (round (a * 100) :: Integer) / 100
+docBytes n = text $ reduceMag B G (fromIntegral n) <> "B"
 
 integralDoc :: (Integral a) => a -> PP.Doc
 integralDoc = PP.integer <$> toInteger
@@ -237,8 +227,9 @@ prepareOpenCLWork source devs args kernelName = do
   outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
   pure $ OpenCLWork context queues source builtProgram kernel inBuf outBuf
 
-run :: GPUEnv -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
-run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
+run :: GPUEnv -> MVar Int -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
+run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
+  putMVar mSteps 0 
   startTime <- getCurrentTime
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
@@ -271,6 +262,7 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
     e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) [e2]
     _ <- clWaitForEvents [e3]
+    _ <- modifyMVar_ mSteps (\s -> pure $ s + 1)
     -- required to avoid leaking everything else
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
@@ -285,8 +277,8 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
     let missingLen = desiredLength - BS.length bs
      in BS.append bs (BS.replicate missingLen 0)
 
-openCLMiner :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO MiningResult
+openCLMiner :: GPUEnv -> [(MVar Int, OpenCLWork)] -> TargetBytes -> HeaderBytes -> IO MiningResult
 openCLMiner cfg works t h = do
-  runningDevs <- traverse (\work -> async $ run cfg t h work randomIO) works
+  runningDevs <- traverse (\(var, work) -> async $ run cfg var t h work randomIO) works
   results <- waitAny runningDevs
   pure $ snd results

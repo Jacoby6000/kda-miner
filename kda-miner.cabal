@@ -37,6 +37,7 @@ executable kda-miner
     , Miner.Types
     , Miner.Updates
     , Miner.OpenCL
+    , Miner.Kernel
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       bytestring >= 0.10
