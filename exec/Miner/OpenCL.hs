@@ -233,7 +233,7 @@ prepareOpenCLWork source devs args kernelName = do
   builtProgram <- buildOpenCLProgram program devs args
   kernel <- createOpenCLKernel builtProgram kernelName
   queues <- traverse (createOpenCLWorkQueue context []) devs
-  let inBuf s p = clCreateBuffer context [CL_MEM_READ_WRITE, CL_MEM_COPY_HOST_PTR] (s, p)
+  let inBuf s p = clCreateBuffer context [CL_MEM_READ_WRITE, CL_MEM_USE_HOST_PTR] (s, p)
   outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
   pure $ OpenCLWork context queues source builtProgram kernel inBuf outBuf
 
@@ -245,7 +245,7 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   let bufBytes = BS.unpack $ BS.append (pad 288 header) target
   bufArr <- newArray bufBytes
   !inBuf <- workPrepareInputBuf work 320 (castPtr bufArr)
-  (T2 end steps) <- doIt offsetP resP inBuf work (1::Int)
+  (T2 end steps) <- doIt offsetP resP inBuf bufArr work (1::Int)
   endTime <- getCurrentTime
   let numNonces = globalSize cfg * 64 * steps
   let !result = MiningResult
@@ -257,24 +257,25 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   _ <- clReleaseContext (workContext work)
   free offsetP
   free resP
+  free bufArr
   pure result
  where
-  doIt offsetP resP inBuf w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) !n = do
+  doIt offsetP resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) !n = do
     nonce <- genNonce
-    clSetKernelArgSto kernel 0 inBuf
-    clSetKernelArgSto kernel 1 nonce
-    e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) []
+    clSetKernelArgSto kernel 0 nonce
+    clSetKernelArgSto kernel 1 inBuf
+    e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) []
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
-    e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) [e2]
+    e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) [e2]
     _ <- clWaitForEvents [e3]
     -- required to avoid leaking everything else
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
     if res == 0 then 
-      doIt offsetP resP inBuf w (n+1)
+      doIt offsetP resP inBuf inBytes w (n+1)
     else 
       return $ T2 res n
-  doIt _ _ _ _ _ = error "using multiple devices at once is unsupported"
+  doIt _ _ _ _ _ _ = error "using multiple devices at once is unsupported"
 
   pad :: Int -> ByteString -> ByteString
   pad desiredLength bs = 
