@@ -55,7 +55,7 @@ data Env = Env
     , envLog         :: !LogFunc
     , envGpu         :: !GPUEnv
     , envArgs        :: !ClientArgs
-    , envHashes      :: IORef Word64
+    , envHashes      :: [IORef Word64]
     , envSecs        :: IORef Word64
     , envLastSuccess :: IORef POSIXTime
     , envUrls        :: IORef (NonEmpty (T2 BaseUrl ChainwebVersion)) }

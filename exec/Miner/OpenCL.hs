@@ -1,4 +1,3 @@
- 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -31,6 +30,7 @@ import qualified Data.Text as T
 import           Data.Time(diffUTCTime, getCurrentTime)
 import           Data.Tuple.Strict(T2(..))
 import qualified Data.List as L
+import           Data.IORef
 import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Storable
@@ -40,9 +40,10 @@ import           Foreign.Ptr
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           System.Random
 
+
 import           Chainweb.Miner.Core
 
-import           Miner.Types(GPUEnv(..), Magnitude(..), reduceMag)
+import           Miner.Types(Env(..), GPUEnv(..), Magnitude(..), reduceMag)
 
 data OpenCLPlatform = OpenCLPlatform
   { platformId :: !CLPlatformID
@@ -223,28 +224,20 @@ prepareOpenCLWork source devs args kernelName = do
   builtProgram <- buildOpenCLProgram program devs args
   kernel <- createOpenCLKernel builtProgram kernelName
   queues <- traverse (createOpenCLWorkQueue context []) devs
-  let inBuf s p = clCreateBuffer context [CL_MEM_READ_WRITE, CL_MEM_USE_HOST_PTR] (s, p)
+  let inBuf s p = clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_COPY_HOST_PTR] (s, p)
   outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
   pure $ OpenCLWork context queues source builtProgram kernel inBuf outBuf
 
-run :: GPUEnv -> MVar Int -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
+run :: GPUEnv -> IORef Word64 -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO ByteString
 run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
-  putMVar mSteps 0 
-  startTime <- getCurrentTime
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
   let bufBytes = BS.unpack $ BS.append (pad 288 header) target
   -- bufArrMem <- callocBytes 320 :: IO (Ptr Word8)
   bufArr <- newArray bufBytes
   !inBuf <- workPrepareInputBuf work 320 (castPtr bufArr)
-  (T2 end steps) <- doIt offsetP resP inBuf bufArr work (1::Int)
-  endTime <- getCurrentTime
-  let numNonces = globalSize cfg * 64 * steps
-  let !result = MiningResult
-        (BSL.toStrict $ BSB.toLazyByteString $ BSB.word64LE end)
-        (fromIntegral numNonces)
-        (fromIntegral numNonces `div` max 1 (round (endTime `diffUTCTime` startTime)))
-        mempty
+  end <- doIt offsetP resP inBuf bufArr work 
+  let !result = BSL.toStrict $ BSB.toLazyByteString $ BSB.word64LE end
   traverse_ clReleaseCommandQueue (workQueue <$> workQueues work)
   _ <- clReleaseContext (workContext work)
   free offsetP
@@ -253,7 +246,7 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
   free inBuf
   pure result
  where
-  doIt offsetP resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) !n = do
+  doIt offsetP resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) = do
     nonce <- genNonce
     clSetKernelArgSto kernel 0 nonce
     clSetKernelArgSto kernel 1 inBuf
@@ -262,23 +255,23 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
     e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf False (0::Int) 8 (castPtr resP) [e2]
     _ <- clWaitForEvents [e3]
-    _ <- modifyMVar_ mSteps (\s -> pure $ s + 1)
+    _ <- modifyIORef' mSteps (+ 1)
     -- required to avoid leaking everything else
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
     if res == 0 then 
-      doIt offsetP resP inBuf inBytes w (n+1)
+      doIt offsetP resP inBuf inBytes w
     else 
-      return $ T2 res n
-  doIt _ _ _ _ _ _ = error "using multiple devices at once is unsupported"
+      return res 
+  doIt _ _ _ _ _ = error "using multiple devices at once is unsupported"
 
   pad :: Int -> ByteString -> ByteString
   pad desiredLength bs = 
     let missingLen = desiredLength - BS.length bs
      in BS.append bs (BS.replicate missingLen 0)
 
-openCLMiner :: GPUEnv -> [(MVar Int, OpenCLWork)] -> TargetBytes -> HeaderBytes -> IO MiningResult
-openCLMiner cfg works t h = do
-  runningDevs <- traverse (\(var, work) -> async $ run cfg var t h work randomIO) works
+openCLMiner :: Env -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO ByteString
+openCLMiner env works t h = do
+  runningDevs <- traverse (\(var, work) -> async $ run (envGpu env) var t h work randomIO) $ zip (envHashes env) works
   results <- waitAny runningDevs
   pure $ snd results
