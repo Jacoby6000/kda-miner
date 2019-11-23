@@ -94,7 +94,7 @@ pClientArgs = ClientArgs <$> pLog <*> some pUrl <*> pMiner <*> pChainId
 
 pCommand :: Parser Command
 pCommand = hsubparser
-    (  command "opencl" (info gpuOpts (progDesc "Perform mining"))
+    (  command "mine" (info gpuOpts (progDesc "Perform mining"))
     <> command "keys" (info (Otherwise <$> keysOpts) (progDesc "Generate public/private key pair"))
     <> command "balance" (info (Otherwise <$> balancesOpts) (progDesc "Get balances on all chains"))
     <> command "show-devices" (info (Otherwise <$> showDevicesOpts) (progDesc "Show all available OpenCL Devices"))
