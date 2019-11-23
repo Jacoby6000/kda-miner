@@ -78,8 +78,9 @@ data OpenCLWork = OpenCLWork
   , workSource :: !Text
   , workProgram :: !CLProgram
   , workKernel :: !CLKernel
-  , workResultBuf :: !CLMem
-  } deriving Show
+  , workPrepareInputBuf :: Int -> Ptr () -> IO CLMem
+  , workOutputBuf :: !CLMem
+  } 
 
 data OpenCLWorkQueue = OpenCLWorkQueue
   { workDevice :: !OpenCLDevice
@@ -150,7 +151,7 @@ queryAllOpenCLDevices = do
 
 releaseWork :: OpenCLWork -> IO Bool
 releaseWork w = do
-  obj <- clReleaseMemObject $ workResultBuf w
+  obj <- clReleaseMemObject $ workOutputBuf w
   kern <- clReleaseKernel $ workKernel w
   prog <- clReleaseProgram $ workProgram w
   queues <- traverse clReleaseCommandQueue (workQueue <$> workQueues w)
@@ -227,26 +228,24 @@ createOpenCLWorkQueue ctx props dev = OpenCLWorkQueue dev <$> clCreateCommandQue
 
 prepareOpenCLWork :: Text -> [OpenCLDevice] -> [Text] -> Text -> IO OpenCLWork
 prepareOpenCLWork source devs args kernelName = do
-  putStrLn "Creating context"
   context <- createOpenCLContext devs
-  putStrLn "Creating program"
   program <- createOpenCLProgram context source
-  putStrLn "Building program"
   builtProgram <- buildOpenCLProgram program devs args
-  putStrLn "Creating kernel"
   kernel <- createOpenCLKernel builtProgram kernelName
-  putStrLn "Creating Work Queue"
   queues <- traverse (createOpenCLWorkQueue context []) devs
-  putStrLn "Creating Buffer"
-  resultBuf <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
-  pure $ OpenCLWork context queues source builtProgram kernel resultBuf
+  let inBuf s p = clCreateBuffer context [CL_MEM_READ_WRITE, CL_MEM_COPY_HOST_PTR] (s, p)
+  outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
+  pure $ OpenCLWork context queues source builtProgram kernel inBuf outBuf
 
 run :: GPUEnv -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO MiningResult
 run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   startTime <- getCurrentTime
   offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
-  (T2 end steps) <- doIt offsetP resP work (1::Int)
+  let bufBytes = BS.unpack $ BS.append (pad 288 header) target
+  bufArr <- newArray bufBytes
+  !inBuf <- workPrepareInputBuf work 320 (castPtr bufArr)
+  (T2 end steps) <- doIt offsetP resP inBuf work (1::Int)
   endTime <- getCurrentTime
   let numNonces = globalSize cfg * 64 * steps
   let !result = MiningResult
@@ -260,11 +259,10 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
   free resP
   pure result
  where
-  doIt offsetP resP w@(OpenCLWork _ [queue] _ _ kernel resultBuf) !n = do
+  doIt offsetP resP inBuf w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) !n = do
     nonce <- genNonce
-    buf <- newArray $ BS.unpack (BS.append (pad 288 header) target)
-    clSetKernelArgSto kernel 0 nonce
-    clSetKernelArgSto kernel 1 buf
+    clSetKernelArgSto kernel 0 inBuf
+    clSetKernelArgSto kernel 1 nonce
     e1 <- clEnqueueWriteBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) []
     e2 <- clEnqueueNDRangeKernel (workQueue queue) kernel [globalSize cfg] [localSize cfg] [e1]
     e3 <- clEnqueueReadBuffer (workQueue queue) resultBuf True (0::Int) 8 (castPtr resP) [e2]
@@ -273,10 +271,10 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
     if res == 0 then 
-      doIt offsetP resP w (n+1)
+      doIt offsetP resP inBuf w (n+1)
     else 
       return $ T2 res n
-  doIt _ _ _ _ = error "using multiple devices at once is unsupported"
+  doIt _ _ _ _ _ = error "using multiple devices at once is unsupported"
 
   pad :: Int -> ByteString -> ByteString
   pad desiredLength bs = 

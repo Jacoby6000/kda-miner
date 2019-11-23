@@ -154,7 +154,7 @@ setUpOpenCL oce = do
     platforms <- liftIO queryAllOpenCLDevices
     devices <- traverse (validateDevice platforms) $ gpuDevices oce    
     kernelSource <- RIO.readFileUtf8 "kernels/kernel.cl"
-    liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d [] "search_nonce") [devices]
+    liftIO $ traverse (\d -> prepareOpenCLWork kernelSource d ["-DWORKSET_SIZE=256"] "search_nonce") [devices]
  where
 
   validateDevice :: [OpenCLPlatform] -> GPUDevice -> RIO Env OpenCLDevice

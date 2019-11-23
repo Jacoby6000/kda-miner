@@ -8,14 +8,14 @@
 
 #define COMPARE_ALL
 
-typedef unsigned long  uint64_t;
-typedef signed   long   int64_t;
-typedef unsigned int   uint32_t;
-typedef signed   int    int32_t;
-typedef unsigned short uint16_t;
-typedef signed   short  int16_t;
-typedef unsigned char   uint8_t;
-typedef signed   char    int8_t;
+typedef ulong uint64_t;
+typedef long int64_t;
+typedef uint uint32_t;
+typedef int int32_t;
+typedef ushort uint16_t;
+typedef short int16_t;
+typedef uchar uint8_t;
+typedef char int8_t;
 
 #define IV0 0x6A09E667UL
 #define IV1 0xBB67AE85UL
@@ -198,76 +198,76 @@ typedef signed   char    int8_t;
 #define Z9E   D
 #define Z9F   0
 
-#define B02 (*(uint32_t*) (buf + 8))
-#define B03 (*(uint32_t*) (buf + 12))
-#define B04 (*(uint32_t*) (buf + 16))
-#define B05 (*(uint32_t*) (buf + 20))
-#define B06 (*(uint32_t*) (buf + 24))
-#define B07 (*(uint32_t*) (buf + 28))
-#define B08 (*(uint32_t*) (buf + 32))
-#define B09 (*(uint32_t*) (buf + 36))
-#define B0A (*(uint32_t*) (buf + 40))
-#define B0B (*(uint32_t*) (buf + 44))
-#define B0C (*(uint32_t*) (buf + 48))
-#define B0D (*(uint32_t*) (buf + 52))
-#define B0E (*(uint32_t*) (buf + 56))
-#define B0F (*(uint32_t*) (buf + 60))
-#define B10 (*(uint32_t*) (buf + 64))
-#define B11 (*(uint32_t*) (buf + 68))
-#define B12 (*(uint32_t*) (buf + 72))
-#define B13 (*(uint32_t*) (buf + 76))
-#define B14 (*(uint32_t*) (buf + 80))
-#define B15 (*(uint32_t*) (buf + 84))
-#define B16 (*(uint32_t*) (buf + 88))
-#define B17 (*(uint32_t*) (buf + 92))
-#define B18 (*(uint32_t*) (buf + 96))
-#define B19 (*(uint32_t*) (buf + 100))
-#define B1A (*(uint32_t*) (buf + 104))
-#define B1B (*(uint32_t*) (buf + 108))
-#define B1C (*(uint32_t*) (buf + 112))
-#define B1D (*(uint32_t*) (buf + 116))
-#define B1E (*(uint32_t*) (buf + 120))
-#define B1F (*(uint32_t*) (buf + 124))
-#define B20 (*(uint32_t*) (buf + 128))
-#define B21 (*(uint32_t*) (buf + 132))
-#define B22 (*(uint32_t*) (buf + 136))
-#define B23 (*(uint32_t*) (buf + 140))
-#define B24 (*(uint32_t*) (buf + 144))
-#define B25 (*(uint32_t*) (buf + 148))
-#define B26 (*(uint32_t*) (buf + 152))
-#define B27 (*(uint32_t*) (buf + 156))
-#define B28 (*(uint32_t*) (buf + 160))
-#define B29 (*(uint32_t*) (buf + 164))
-#define B2A (*(uint32_t*) (buf + 168))
-#define B2B (*(uint32_t*) (buf + 172))
-#define B2C (*(uint32_t*) (buf + 176))
-#define B2D (*(uint32_t*) (buf + 180))
-#define B2E (*(uint32_t*) (buf + 184))
-#define B2F (*(uint32_t*) (buf + 188))
-#define B30 (*(uint32_t*) (buf + 192))
-#define B31 (*(uint32_t*) (buf + 196))
-#define B32 (*(uint32_t*) (buf + 200))
-#define B33 (*(uint32_t*) (buf + 204))
-#define B34 (*(uint32_t*) (buf + 208))
-#define B35 (*(uint32_t*) (buf + 212))
-#define B36 (*(uint32_t*) (buf + 216))
-#define B37 (*(uint32_t*) (buf + 220))
-#define B38 (*(uint32_t*) (buf + 224))
-#define B39 (*(uint32_t*) (buf + 228))
-#define B3A (*(uint32_t*) (buf + 232))
-#define B3B (*(uint32_t*) (buf + 236))
-#define B3C (*(uint32_t*) (buf + 240))
-#define B3D (*(uint32_t*) (buf + 244))
-#define B3E (*(uint32_t*) (buf + 248))
-#define B3F (*(uint32_t*) (buf + 252))
-#define B40 (*(uint32_t*) (buf + 256))
-#define B41 (*(uint32_t*) (buf + 260))
-#define B42 (*(uint32_t*) (buf + 264))
-#define B43 (*(uint32_t*) (buf + 268))
-#define B44 (*(uint32_t*) (buf + 272))
-#define B45 (*(uint32_t*) (buf + 276))
-#define B46 (*(uint32_t*) (buf + 280))
-#define B47 (*(uint32_t*) (buf + 284))
+#define B02 (*(constant uint32_t*) (buf + 8))
+#define B03 (*(constant uint32_t*) (buf + 12))
+#define B04 (*(constant uint32_t*) (buf + 16))
+#define B05 (*(constant uint32_t*) (buf + 20))
+#define B06 (*(constant uint32_t*) (buf + 24))
+#define B07 (*(constant uint32_t*) (buf + 28))
+#define B08 (*(constant uint32_t*) (buf + 32))
+#define B09 (*(constant uint32_t*) (buf + 36))
+#define B0A (*(constant uint32_t*) (buf + 40))
+#define B0B (*(constant uint32_t*) (buf + 44))
+#define B0C (*(constant uint32_t*) (buf + 48))
+#define B0D (*(constant uint32_t*) (buf + 52))
+#define B0E (*(constant uint32_t*) (buf + 56))
+#define B0F (*(constant uint32_t*) (buf + 60))
+#define B10 (*(constant uint32_t*) (buf + 64))
+#define B11 (*(constant uint32_t*) (buf + 68))
+#define B12 (*(constant uint32_t*) (buf + 72))
+#define B13 (*(constant uint32_t*) (buf + 76))
+#define B14 (*(constant uint32_t*) (buf + 80))
+#define B15 (*(constant uint32_t*) (buf + 84))
+#define B16 (*(constant uint32_t*) (buf + 88))
+#define B17 (*(constant uint32_t*) (buf + 92))
+#define B18 (*(constant uint32_t*) (buf + 96))
+#define B19 (*(constant uint32_t*) (buf + 100))
+#define B1A (*(constant uint32_t*) (buf + 104))
+#define B1B (*(constant uint32_t*) (buf + 108))
+#define B1C (*(constant uint32_t*) (buf + 112))
+#define B1D (*(constant uint32_t*) (buf + 116))
+#define B1E (*(constant uint32_t*) (buf + 120))
+#define B1F (*(constant uint32_t*) (buf + 124))
+#define B20 (*(constant uint32_t*) (buf + 128))
+#define B21 (*(constant uint32_t*) (buf + 132))
+#define B22 (*(constant uint32_t*) (buf + 136))
+#define B23 (*(constant uint32_t*) (buf + 140))
+#define B24 (*(constant uint32_t*) (buf + 144))
+#define B25 (*(constant uint32_t*) (buf + 148))
+#define B26 (*(constant uint32_t*) (buf + 152))
+#define B27 (*(constant uint32_t*) (buf + 156))
+#define B28 (*(constant uint32_t*) (buf + 160))
+#define B29 (*(constant uint32_t*) (buf + 164))
+#define B2A (*(constant uint32_t*) (buf + 168))
+#define B2B (*(constant uint32_t*) (buf + 172))
+#define B2C (*(constant uint32_t*) (buf + 176))
+#define B2D (*(constant uint32_t*) (buf + 180))
+#define B2E (*(constant uint32_t*) (buf + 184))
+#define B2F (*(constant uint32_t*) (buf + 188))
+#define B30 (*(constant uint32_t*) (buf + 192))
+#define B31 (*(constant uint32_t*) (buf + 196))
+#define B32 (*(constant uint32_t*) (buf + 200))
+#define B33 (*(constant uint32_t*) (buf + 204))
+#define B34 (*(constant uint32_t*) (buf + 208))
+#define B35 (*(constant uint32_t*) (buf + 212))
+#define B36 (*(constant uint32_t*) (buf + 216))
+#define B37 (*(constant uint32_t*) (buf + 220))
+#define B38 (*(constant uint32_t*) (buf + 224))
+#define B39 (*(constant uint32_t*) (buf + 228))
+#define B3A (*(constant uint32_t*) (buf + 232))
+#define B3B (*(constant uint32_t*) (buf + 236))
+#define B3C (*(constant uint32_t*) (buf + 240))
+#define B3D (*(constant uint32_t*) (buf + 244))
+#define B3E (*(constant uint32_t*) (buf + 248))
+#define B3F (*(constant uint32_t*) (buf + 252))
+#define B40 (*(constant uint32_t*) (buf + 256))
+#define B41 (*(constant uint32_t*) (buf + 260))
+#define B42 (*(constant uint32_t*) (buf + 264))
+#define B43 (*(constant uint32_t*) (buf + 268))
+#define B44 (*(constant uint32_t*) (buf + 272))
+#define B45 (*(constant uint32_t*) (buf + 276))
+#define B46 (*(constant uint32_t*) (buf + 280))
+#define B47 (*(constant uint32_t*) (buf + 284))
 #define B48 0x0U
 #define B49 0x0U
 #define B4A 0x0U
@@ -277,10 +277,10 @@ typedef signed   char    int8_t;
 #define B4E 0x0U
 #define B4F 0x0U
 
-#define A0 (*(uint64_t*) (buf + 312))
-#define B0 (*(uint64_t*) (buf + 304))
-#define C0 (*(uint64_t*) (buf + 296))
-#define D0 (*(uint64_t*) (buf + 288))
+#define A0 (*(constant uint64_t*) (buf + 312))
+#define B0 (*(constant uint64_t*) (buf + 304))
+#define C0 (*(constant uint64_t*) (buf + 296))
+#define D0 (*(constant uint64_t*) (buf + 288))
 
 
 #define Mx(r0, r, i)    Mx_(r0, Z ## r ## i)
@@ -362,14 +362,14 @@ typedef signed   char    int8_t;
 #endif
 
 
-kernel void search_nonce(uint64_t start_nonce, __constant uint8_t* buf, global uint64_t* result_ptr) {
+kernel void search_nonce(constant uint8_t* buf, uint64_t start_nonce, global uint64_t* result_ptr) {
   size_t gid = get_global_id(0);
   uint64_t nonce0 = start_nonce + gid * WORKSET_SIZE;
 
   for (uint64_t i = 0; i < WORKSET_SIZE; i++) {
     uint64_t nonce = nonce0 + i;
-    uint32_t B00 = (uint32_t) (nonce & 0xFFFFFFFF);
-    uint32_t B01 = (uint32_t) (nonce >> 32);
+    uint32_t B00 = as_uint2(nonce).s0;
+    uint32_t B01 = as_uint2(nonce).s1;
 
     uint32_t H0, H1, H2, H3, H4, H5, H6, H7;
 
@@ -401,6 +401,7 @@ kernel void search_nonce(uint64_t start_nonce, __constant uint8_t* buf, global u
 
     if (TEST_RESULT()) {
       *result_ptr = nonce;
+      break;
     }
   }
 }
