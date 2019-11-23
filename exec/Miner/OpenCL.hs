@@ -287,6 +287,6 @@ run cfg (TargetBytes target) (HeaderBytes header) work genNonce = do
 
 openCLMiner :: GPUEnv -> [OpenCLWork] -> TargetBytes -> HeaderBytes -> IO MiningResult
 openCLMiner cfg works t h = do
-  runningDevs <- traverse (\device -> async $ run cfg t h device randomIO) works
+  runningDevs <- traverse (\work -> async $ run cfg t h work randomIO) works
   results <- waitAny runningDevs
   pure $ snd results
