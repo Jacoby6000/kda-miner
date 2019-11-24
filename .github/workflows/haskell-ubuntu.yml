@@ -127,7 +127,9 @@ jobs:
     - name: Create Artifact
       run: |
         cabal install --installdir=./
-        zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md LICENSE
+        zip -j kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}.zip kda-miner README.md LICENSE
+      env:
+        TAG_REF_NAME: ${{ github.ref }}
 
     - name: Load Release URL File from release job
       uses: actions/download-artifact@v1
