@@ -25,10 +25,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@master
 
+    - name: Cabal Cache
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/.cabal
+        key: ${{ runner.os }}-primes    
+
     - name: Cabal Dependencies
       run: |
         cabal update
         cabal install --only-dependencies
+
+    - name: Build Cache
+      uses: actions/cache@v1
+      with:
+        path: dist-newstyle
+        key: ${{ runner.os }}-primes
 
     - name: Build
       run: |
