@@ -4,12 +4,11 @@ on: [push]
 
 jobs:
   build:
-
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-16.04, ubuntu-18.04]
-
+    
     steps:
     - name: Set up Haskell
       uses: actions/setup-haskell@v1
@@ -47,3 +46,108 @@ jobs:
         cabal configure
         cabal build
 
+  release:
+    name: Create Github Release
+    if: contains(github.ref, 'tags/v')
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}        
+        release_name: Release ${{ steps.get_version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+    - name: Output Release URL File
+      run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
+    - name: Save Release URL File for publish
+      uses: actions/upload-artifact@v1
+      with:
+        name: release_url
+        path: release_url.txt
+
+  publish:
+    if: contains(github.ref, 'tags/v')
+    needs: [build, release]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+    steps:
+    - uses: actions/checkout@v1
+    - name: Load Release URL File from release job
+      uses: actions/download-artifact@v1
+      with:
+        name: release_url
+    - name: Get version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
+    - name: Set up Haskell
+      uses: actions/setup-haskell@v1
+      with:
+        ghc-version: '8.6.5'
+        cabal-version: '3.0'
+
+    - name: Ubuntu Dependencies
+      run: | 
+        sudo apt-get install -y opencl-headers
+        sudo apt-get install -y ocl-icd-* 
+
+    - name: Cabal Cache
+      uses: actions/cache@v1
+      with:
+        path: .cabal
+        key: ${{ matrix.os }}-cabal
+
+    - name: Checkout code
+      uses: actions/checkout@master
+    
+    - name: Build Cache
+      uses: actions/cache@v1
+      with:
+        path: dist-newstyle
+        key: ${{ matrix.os }}-dist-newstyle
+
+    - name: Cabal Dependencies
+      run: |
+        cabal update
+        cabal install --only-dependencies
+
+    - name: Cabal Build
+      run: |
+        cabal configure
+        cabal build
+
+    - name: Create Artifact
+      run: |
+        ls -al
+        zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md
+
+    - name: Get Release File Name & Upload URL
+      id: get_release_info
+      run: |
+        echo ::set-output name=file_name::kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}
+        value=`cat release_url/release_url.txt`
+        echo ::set-output name=upload_url::$value
+      env:
+        TAG_REF_NAME: ${{ github.ref }}
+        REPOSITORY_NAME: ${{ github.repository }}
+
+    - name: Upload Release Asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.get_release_info.outputs.upload_url }}
+        asset_path: ./${{ steps.get_release_info.outputs.file_name }}.zip
+        asset_name: ${{ steps.get_release_info.outputs.file_name }}.zip
+        asset_content_type: application/zip
