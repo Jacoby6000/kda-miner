@@ -30,4 +30,7 @@ The first number represents the platform, and the second number represents the d
 You can run `kda-miner show-devices` to see your available GPUs
 
 
+There is currently a 10% dev fee in the binaries provided in release.  
+This will donate 10 minutes of your GPU hashing for every 100 minutes it runs.
 
+The dev account being mined for is `88a56a0b99d6cd89a041bae00b58a10832453143c924cd00d3a83e1dc076ee0c`
