@@ -24,7 +24,7 @@ jobs:
     - name: Cabal Cache
       uses: actions/cache@v1
       with:
-        path: .cabal
+        path: /home/runner/.cabal
         key: ${{ matrix.os }}-cabal
 
     - name: Checkout code
@@ -105,7 +105,7 @@ jobs:
     - name: Cabal Cache
       uses: actions/cache@v1
       with:
-        path: .cabal
+        path: /home/runner/.cabal
         key: ${{ matrix.os }}-cabal
 
     - name: Checkout code
