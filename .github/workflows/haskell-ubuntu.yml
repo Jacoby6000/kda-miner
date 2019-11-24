@@ -126,7 +126,7 @@ jobs:
 
     - name: Create Artifact
       run: |
-        ls -al
+        cabal install --installdir=./
         zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md LICENSE
 
     - name: Load Release URL File from release job
