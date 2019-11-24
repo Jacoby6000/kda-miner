@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE ScopedTypeVariables     #-}
 
 module Miner.OpenCL(
@@ -35,7 +34,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           System.Random
 
 
-import           Miner.Types(Env(..), GPUEnv(..), Magnitude(..), reduceMag)
+import           Miner.Types(Env(..), GPUEnv(..), showT, round2)
 import           Miner.Chainweb
 
 data OpenCLPlatform = OpenCLPlatform
@@ -156,8 +155,15 @@ releaseWork w = do
 text :: Text -> PP.Doc
 text = PP.text <$> T.unpack
 
+data Magnitude = B | K | M | G deriving (Eq, Show)
 docBytes :: Integral a => a -> PP.Doc
 docBytes n = text $ reduceMag B G (fromIntegral n) <> "B"
+ where
+  reduceMag :: Magnitude -> Magnitude -> Double -> Text
+  reduceMag B mx a = if a > 1024 && mx /= B then reduceMag K mx (a / 1024) else (showT . round2) a <> " "
+  reduceMag K mx a = if a > 1024 && mx /= K then reduceMag M mx (a / 1024) else (showT . round2) a <> " K"
+  reduceMag M mx a = if a > 1024 && mx /= M then reduceMag G mx (a / 1024) else (showT . round2) a <> " M"
+  reduceMag G _ a = (showT . round2) a <> " G"
 
 integralDoc :: (Integral a) => a -> PP.Doc
 integralDoc = PP.integer <$> toInteger

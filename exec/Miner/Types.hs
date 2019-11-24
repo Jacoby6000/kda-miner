@@ -15,14 +15,14 @@ module Miner.Types
   , GPUEnv(..)
   , OtherCommand(..)
   , GPUDevice(..)
-  , Magnitude(..)
   , HostAddress(..)
   , Miner(..)
     -- * miscellaneous
   , tlsSettings
   , donateTo
-  , reduceMag
   , showT
+  , round2
+  , roundN
   ) where
 
 import           Data.Aeson 
@@ -204,20 +204,17 @@ data OtherCommand = ShowDevices
 
 showDevicesOpts :: Parser OtherCommand
 showDevicesOpts = pure ShowDevices
-
-data Magnitude = B | K | M | G deriving (Eq, Show)
-   
+ 
 showT :: Show a => a -> Text
 showT = T.pack . show
 
-reduceMag :: Magnitude -> Magnitude -> Double -> Text
-reduceMag B mx a = if a > 1024 && mx /= B then reduceMag K mx (a / 1024) else (showT . round2) a <> " "
-reduceMag K mx a = if a > 1024 && mx /= K then reduceMag M mx (a / 1024) else (showT . round2) a <> " K"
-reduceMag M mx a = if a > 1024 && mx /= M then reduceMag G mx (a / 1024) else (showT . round2) a <> " M"
-reduceMag G _ a = (showT . round2) a <> " G"
+round2 :: RealFrac a => a -> a
+round2 = roundN (2 :: Int)
 
-round2 :: Double -> Double
-round2 a = fromIntegral (round (a * 100) :: Integer) / 100
+roundN :: (RealFrac a, Integral b) => b -> a -> a
+roundN p a = 
+  let m = 10 ^ p 
+   in fromIntegral (round (a * m) :: Integer) / m
 
 tlsSettings :: TLSSettings
 tlsSettings = TLSSettingsSimple True True True
