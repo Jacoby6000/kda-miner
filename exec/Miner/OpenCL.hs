@@ -236,7 +236,6 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
   _ <- clReleaseContext (workContext work)
   free resP
   free bufArr
-  free inBuf
   pure result
  where
   doIt resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) = do

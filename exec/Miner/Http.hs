@@ -1,9 +1,5 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Miner.Http(getJSON, getWithBody, getJSONWith, post) where
@@ -13,10 +9,8 @@ import           Control.Monad.Catch
 import           Miner.Types
 import           Data.Aeson
 import           Data.Bifunctor
-import           Data.Text.Lazy as LT
 import qualified Data.Text as T
 import qualified Data.List as L
-import           GHC.Generics
 import           Data.ByteString.Lazy
 import qualified Data.ByteString.Char8 as B8
 import qualified Network.HTTP.Client as C
@@ -60,14 +54,15 @@ readResponse :: IO (W.Response ByteString) -> IO (Either T.Text (W.Response Byte
 readResponse responseIO = (Right <$> responseIO) `catch` liftHandler handleHttpError
  where
   handleHttpError :: C.HttpException -> String
-  handleHttpError (C.InvalidUrlException url message) = "URL " <> url <> " is malformed: " <> message
+  handleHttpError (C.InvalidUrlException u message) = "URL " <> u <> " is malformed: " <> message
   handleHttpError (C.HttpExceptionRequest _ ex) = case ex of
     C.ConnectionTimeout -> "HTTP connection timed out."
     C.ResponseTimeout -> "HTTP response timed out."
     C.StatusCodeException res _ -> 
       "HTTP Request failed with code " 
-      <> show (res ^. W.responseStatus ^. W.statusCode) 
-      <> ": " <> B8.unpack (res ^. W.responseStatus ^. W.statusMessage)
+      <> show (res ^. (W.responseStatus . W.statusCode))
+      <> ": " <> B8.unpack (res ^. (W.responseStatus . W.statusMessage))
     other -> "Unhandled HTTP Error: " <> show other
 
+liftHandler :: Applicative f => (a -> String) -> a -> f (Either T.Text b)
 liftHandler f = pure . Left . T.pack . f

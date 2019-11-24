@@ -13,7 +13,6 @@ module Miner.Updates
   ) where
 
 import           Data.Bytes.Put
-import           Data.ByteString.Lazy
 import           Data.Tuple.Strict (T2(..))
 import           Network.HTTP.Client hiding (Proxy(..), responseBody)
 import           Network.Wai.EventSource (ServerEvent(..))
@@ -21,7 +20,6 @@ import           Network.Wai.EventSource.Streaming (withEvents)
 import           RIO
 import qualified RIO.HashMap as HM
 import qualified RIO.NonEmpty as NEL
-import qualified RIO.Text as T
 import qualified Streaming.Prelude as SP
 -- internal modules
 import           Miner.Types (Env(..), HostAddress(..))

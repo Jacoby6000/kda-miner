@@ -203,13 +203,12 @@ getWork = do
         response <- getWithBody h ("/chainweb/0.0/" <> T.unpack v <> "/mining/work") (toJSON acct)
         pure (WorkBytes . BL.toStrict <$> response)
       where
-        a = envArgs e
         getMiningAcct = do
           env <- ask
           seconds :: Integer <- liftIO $ round <$> getPOSIXTime 
           let donateRate = 10
           let minutes :: Integer = round $ (fromIntegral seconds :: Double) / 60
-          let donateTimeRemaining = (mod minutes 100) - (100 - donateRate)
+          let donateTimeRemaining = mod minutes 100 - (100 - donateRate)
           let donate = (donateTimeRemaining > 0)
           when donate (logInfo $ display ("Donating time for " <> (T.pack . show) donateTimeRemaining <> " minutes"))
           pure $ if donate then donateTo else (miner . envArgs) env
@@ -299,7 +298,7 @@ miningLoop updateMap inner = mask go
         res <- withPreemption updateMap updateKey (inner tbytes hbytes) 
         e <- ask
         endTime <- liftIO getPOSIXTime
-        let addSecs = fromIntegral (round ((endTime - startTime) * 1000000)) `div` 1000000
+        let addSecs  = fromIntegral (round ((endTime - startTime) * 1000000)) `div` 1000000
         modifyIORef' (envSecs e) (+addSecs)
         secs <- readIORef (envSecs e)
         logHashRates $ fromIntegral secs

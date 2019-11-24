@@ -74,7 +74,7 @@ data ClientArgs = ClientArgs
 data Miner = Miner
   { account :: Text
   , publicKeys :: [Text]
-  , predicate :: Text
+  , keyPred :: Text
   } deriving stock (Generic)
 
 instance ToJSON Miner where
