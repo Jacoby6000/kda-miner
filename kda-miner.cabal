@@ -27,6 +27,13 @@ common commons
     -Widentities
     -funclutter-valid-hole-fits
     -fmax-relevant-binds=0
+    -threaded 
+    -rtsopts 
+    -with-rtsopts=-N 
+    -static 
+    -O5
+  cc-options: -static
+  ld-options: -static -pthread
 
 executable kda-miner
   import: commons
@@ -39,7 +46,6 @@ executable kda-miner
     , Miner.Kernel
     , Miner.Http
     , Miner.Chainweb
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       bytestring >= 0.10
     , aeson >= 1.4.3
