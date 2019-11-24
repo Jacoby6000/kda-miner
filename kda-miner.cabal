@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:          kda-miner
-version:       1.0.4
+version:       1.0.5
 description:   Unofficial mining software for the Kadena Public Blockchain.
 homepage:      https://github.com/kadena-io/chainweb-miner
 author:        Jacob Barber
