@@ -77,7 +77,6 @@ import           RIO.List.Partial ((!!))
 import qualified RIO.NonEmpty as NEL
 import qualified RIO.NonEmpty.Partial as NEL
 import qualified RIO.Text as T
-import           Servant.Client
 import qualified System.Random.MWC as MWC
 import           Text.Printf (printf)
 
@@ -118,12 +117,12 @@ work cmd cargs = do
                 successStart <- getPOSIXTime >>= newIORef
                 runRIO (Env g m logFunc cmd cargs stats start successStart mUrls) run
   where
-    nodeVer :: Manager -> BaseUrl -> IO (Either ClientError (T2 BaseUrl ChainwebVersion))
+    nodeVer :: Manager -> HostAddress -> IO (Either String (T2 HostAddress Text))
     nodeVer m baseurl = (T2 baseurl <$>) <$> getInfo m baseurl
 
 
 
-getInfo :: Manager -> BaseUrl -> IO (Either ClientError ChainwebVersion)
+getInfo :: Manager -> HostAddress -> IO (Either String Text)
 getInfo m url = fmap nodeVersion <$> runClientM (client (Proxy @NodeInfoApi)) cenv
   where
     cenv = ClientEnv m url Nothing
@@ -202,19 +201,11 @@ getWork = do
     policy :: RetryPolicy
     policy = exponentialBackoff 500000 <> limitRetries 7
 
-    warn :: Either ClientError WorkBytes -> RIO Env Bool
+    warn :: Either Text WorkBytes -> RIO Env Bool
     warn (Right _) = pure False
-    warn (Left se) = bad se $> True
+    warn (Left se) = logWarn ("Network Error: " <> e) $> True
 
-    bad :: ClientError -> RIO Env ()
-    bad (ConnectionError _) = logWarn "Could not connect to the Node."
-    bad (FailureResponse _ r) = logWarn $ c <> " from Node: " <> m
-      where
-        c = display . statusCode $ responseStatusCode r
-        m = displayBytesUtf8 . BL.toStrict $ responseBody r
-    bad _ = logError "Something truly bad has happened."
-
-    f :: Env -> IO (Either ClientError WorkBytes)
+    f :: Env -> IO (Either String WorkBytes)
     f e = do
         T2 u v <- NEL.head <$> readIORef (envUrls e)
         acct <- runRIO e getMiningAcct

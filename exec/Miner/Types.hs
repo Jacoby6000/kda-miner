@@ -18,6 +18,8 @@ module Miner.Types
   , Magnitude(..)
   , HeaderBytes(..)
   , TargetBytes(..)
+  , ChainBytes(..)
+  , WorkBytes(..)
   , HostAddress(..)
   , ChainId
     -- * miscellaneous
@@ -32,6 +34,7 @@ import           Data.Generics.Product.Fields (field)
 import           Data.List
 import           Data.Bytes.Put
 import           Data.Bytes.Signed (unsigned)
+import qualified Data.ByteString.Char8 as B
 import           Data.List.Split
 import qualified Data.Text as T
 import           Data.Time.Clock.POSIX (POSIXTime)
@@ -98,8 +101,10 @@ data GPUDevice = GPUDevice
   , deviceIndex :: Int
   } deriving stock (Generic)
 
-newtype HeaderBytes = HeaderBytes R.ByteString
-newtype TargetBytes = TargetBytes R.ByteString
+newtype HeaderBytes = HeaderBytes B.ByteString
+newtype TargetBytes = TargetBytes B.ByteString
+newtype ChainBytes = ChainBytes B.ByteString
+newtype WorkBytes = WorkBytes B.ByteString
 
 type ChainId = Word32
 
