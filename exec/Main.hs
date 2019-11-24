@@ -121,7 +121,7 @@ work cmd cargs = do
 
 
 getInfo :: HostAddress -> IO (Either Text Text)
-getInfo url = (fmap nodeVersion) <$> (getJSON url "/info" :: (IO (Either Text NodeInfo)))
+getInfo url = fmap nodeVersion <$> (getJSON url "/info" :: (IO (Either Text NodeInfo)))
 
 run :: RIO Env ()
 run = do
@@ -138,7 +138,7 @@ setUpOpenCL :: GPUEnv -> RIO Env [OpenCLWork]
 setUpOpenCL oce = do
     platforms <- liftIO queryAllOpenCLDevices
     devices <- fetchDevices platforms $ gpuDevices oce
-    liftIO $ traverse (\d -> prepareOpenCLWork kernel d [wss] "search_nonce") [devices]
+    liftIO $ traverse (\d -> prepareOpenCLWork kernel d [wss] "search_nonce") devices
  where
   wss :: Text
   wss = T.pack $ "-DWORKSET_SIZE=" <> show (workSetSize oce)
@@ -326,7 +326,7 @@ miningLoop updateMap inner = mask go
             T3 cbytes _ hbytes = unWorkBytes w
 
 opencl :: [OpenCLWork] -> TargetBytes -> HeaderBytes -> RIO Env HeaderBytes
-opencl works t h@(HeaderBytes blockbytes) = loop <* liftIO (traverse releaseWork works)
+opencl !works t h@(HeaderBytes blockbytes) = loop 
  where
   loop :: RIO Env HeaderBytes
   loop = do
