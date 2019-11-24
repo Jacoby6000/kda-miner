@@ -127,6 +127,7 @@ jobs:
     - name: Create Artifact
       run: |
         cabal install --installdir=./
+        strip kda-miner
         zip -j kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}.zip kda-miner README.md LICENSE
       env:
         TAG_REF_NAME: ${{ github.ref }}
