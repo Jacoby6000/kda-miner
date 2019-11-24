@@ -12,6 +12,8 @@ module Miner.Updates
   , withPreemption
   ) where
 
+import           Data.Bytes.Put
+import           Data.ByteString.Lazy
 import           Data.Tuple.Strict (T2(..))
 import           Network.HTTP.Client hiding (Proxy(..), responseBody)
 import           Network.Wai.EventSource (ServerEvent(..))
@@ -20,14 +22,11 @@ import           RIO
 import qualified RIO.HashMap as HM
 import qualified RIO.NonEmpty as NEL
 import qualified RIO.Text as T
-import           Servant.Client
 import qualified Streaming.Prelude as SP
 
 -- internal modules
 
-import           Chainweb.Utils (runPut, toText)
-import           Chainweb.Version (ChainId, ChainwebVersion, encodeChainId)
-import           Miner.Types (Env(..))
+import           Miner.Types (ChainId, Env(..), HostAddress(..), encodeChainId)
 
 ---
 
@@ -111,13 +110,13 @@ updateStream cid var = do
     realEvent ServerEvent{} = True
     realEvent _             = False
 
-    req :: T2 BaseUrl ChainwebVersion -> Request
+    req :: T2 HostAddress Text -> Request
     req (T2 u v) = defaultRequest
-        { host = encodeUtf8 . T.pack . baseUrlHost $ u
-        , path = "chainweb/0.0/" <> encodeUtf8 (toText v) <> "/mining/updates"
-        , port = baseUrlPort u
+        { host = encodeUtf8 . addressHostname $ u
+        , path = "chainweb/0.0/" <> encodeUtf8 v <> "/mining/updates"
+        , port = addressPort u
         , secure = True
         , method = "GET"
-        , requestBody = RequestBodyBS $ runPut (encodeChainId cid)
+        , requestBody = RequestBodyBS $ runPutS (encodeChainId cid)
         , responseTimeout = responseTimeoutNone
         }

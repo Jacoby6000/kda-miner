@@ -1,9 +1,0 @@
-executables:
-  ops:
-    ghc-options:
-      - -threaded
-      - -static
-      - -O2
-      - -split-sections
-    cc-options: -static
-    ld-options: -static -pthread

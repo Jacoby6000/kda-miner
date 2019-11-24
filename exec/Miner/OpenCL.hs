@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE ScopedTypeVariables     #-}
 
@@ -19,7 +18,6 @@ module Miner.OpenCL(
 import           Control.Exception.Safe
 import           Control.Parallel.OpenCL
 import           Control.Concurrent.Async
-import           Control.Concurrent.MVar
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BSB
@@ -27,8 +25,6 @@ import qualified Data.ByteString.Lazy as BSL
 import           Data.Foldable
 import           Data.Text(Text)
 import qualified Data.Text as T
-import           Data.Time(diffUTCTime, getCurrentTime)
-import           Data.Tuple.Strict(T2(..))
 import qualified Data.List as L
 import           Data.IORef
 import           Data.Word
@@ -41,9 +37,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           System.Random
 
 
-import           Chainweb.Miner.Core
-
-import           Miner.Types(Env(..), GPUEnv(..), Magnitude(..), reduceMag)
+import           Miner.Types(HeaderBytes(..), TargetBytes(..), Env(..), GPUEnv(..), Magnitude(..), reduceMag)
 
 data OpenCLPlatform = OpenCLPlatform
   { platformId :: !CLPlatformID

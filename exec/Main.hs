@@ -82,15 +82,6 @@ import qualified System.Random.MWC as MWC
 import           Text.Printf (printf)
 
 -- internal modules
-
-import           Chainweb.BlockHeader
-import           Chainweb.BlockHeader.Validation (prop_block_pow)
-import           Chainweb.Miner.Core
-import           Chainweb.Miner.RestAPI.Client (solvedClient, workClient)
-import           Chainweb.RestAPI.NodeInfo (NodeInfo(..), NodeInfoApi)
-import           Chainweb.Utils (runGet)
-import           Chainweb.Version
-import           Miner.Balance
 import           Miner.OpenCL
 import           Miner.Types
 import           Miner.Updates
@@ -106,7 +97,6 @@ main = execParser opts >>= \case
     GPU env cargs -> work env cargs >> exitFailure
     Otherwise ShowDevices -> PP.putDoc =<< PP.prettyList <$> queryAllOpenCLDevices
     Otherwise Keys -> genKeys
-    Otherwise (Balance url account) -> getBalances url account
   where
     opts :: ParserInfo Command
     opts = info (pCommand <**> helper)
