@@ -113,10 +113,21 @@ work cmd cargs = do
                 stats <- traverse (const $ newIORef 0) (gpuDevices cmd)
                 start <- newIORef 0
                 successStart <- getPOSIXTime >>= newIORef
-                runRIO (Env g m logFunc cmd cargs stats start successStart mUrls) run
+                runRIO (Env g m logFunc cmd cargs stats start successStart mUrls) $ do 
+                  miner <- validateMiner (miner cargs)
+                  runRIO (Env g m logFunc cmd (ClientArgs (ll cargs) (coordinators cargs) miner) stats start successStart mUrls) run
   where
     nodeVer :: HostAddress -> IO (Either Text (T2 HostAddress Text))
     nodeVer baseurl = (T2 baseurl <$>) <$> getInfo baseurl
+    
+    validateMiner :: Miner -> RIO Env Miner
+    validateMiner (Miner acct [] pred) =
+      if not $ validatePKey (T.unpack acct)
+      then 
+        logWarn "No mining key supplied, and account name is not a valid public key.  Either specify a public key, or use an account-name which is the same as your public key." >>
+          liftIO (exitWith (ExitFailure 1))
+      else pure $ Miner acct [acct] pred
+    validateMiner m = pure m
 
 
 
@@ -125,9 +136,12 @@ getInfo url = fmap nodeVersion <$> (getJSON url "/info" :: (IO (Either Text Node
 
 run :: RIO Env ()
 run = do
-    logInfo "Starting Miner."
-    s <- scheme
-    mining s
+  e <- ask 
+  logInfo "Starting Miner."
+  s <- scheme
+  mining s
+ where
+
 
 scheme :: RIO Env (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
 scheme = do

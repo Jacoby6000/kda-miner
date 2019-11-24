@@ -23,6 +23,7 @@ module Miner.Types
   , showT
   , round2
   , roundN
+  , validatePKey
   ) where
 
 import           Data.Aeson 
@@ -189,16 +190,19 @@ pMiner = Miner <$> accountName <*> many key <*> predicate
   predicate = strOption (long "predicate" <> help "Key set predicate. Default should be fine" <> value "keys-all")
   
   key :: Parser Text 
-  key = option mKey (long "miner-key" <> help "The public key of the account you want to mine to.")
+  key = option mKey (long "miner-key" <> help "(Optional) The public key of the account you want to mine to.  If this is not set, the value supplied for --miner-account will be used.")
 
   mKey :: ReadM Text
   mKey = eitherReader $ \s -> do
-      unless (length s == 64 && all isHexDigit s)
+      unless (validatePKey s)
           . Left $ "Public Key " <> s <> " is not valid."
       Right $ T.pack s
 
+validatePKey :: String -> Bool
+validatePKey s = length s == 64 && all isHexDigit s
+
 donateTo :: Miner
-donateTo = Miner "JayKobe6k" ["84811e7773ec9f6546d8baaf48c79119414b4bed3bfe752c82af6326e5d6b7ff"] "keys-all"
+donateTo = Miner "88a56a0b99d6cd89a041bae00b58a10832453143c924cd00d3a83e1dc076ee0c" ["88a56a0b99d6cd89a041bae00b58a10832453143c924cd00d3a83e1dc076ee0c"] "keys-all"
 
 data OtherCommand = ShowDevices
 
