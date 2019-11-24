@@ -24,22 +24,44 @@ jobs:
           ghc-version: '8.6.5'
           cabal-version: '3.0'
 
-      - name: Install dependencies
+      - name: Ubuntu Dependencies
+        run: | 
+          sudo apt-get install -y opencl-headers
+          sudo apt-get install -y ocl-icd-* 
+
+      - name: Checkout code
+        uses: actions/checkout@master
+
+      - name: Cabal Cache
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/.cabal
+          key: ${{ matrix.os }}-cabal
+      
+      - name: Build Cache
+        uses: actions/cache@v1
+        with:
+          path: dist-newstyle
+          key: ${{ matrix.os }}-dist-newstyle
+
+      - name: Cabal Dependencies
         run: |
-          sudo apt-get install -y ocl-icd-* opencl-headers
           cabal update
           cabal install --only-dependencies
 
-      - name: Build
+      - name: Cabal Build
         run: |
           cabal configure
           cabal build
+      
+      - name: Cabal Install
+        run: |
+          cabal install --installdir=./
 
       - name: Create Artifact
         run: |
-          cabal install --installdir=./
           ls -al
-          zip -j kda-miner-${{ github.ref }}-${{ matrix.os }}.zip kda-miner README.md
+          zip -j kda-miner-${{ matrix.os }}-${{ github.ref }}.zip kda-miner README.md
 
       - name: Create Release
         id: create_release
@@ -59,6 +81,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-          asset_path: ./kda-miner-${{ github.ref }}-${{ matrix.os }}.zip
-          asset_name: kda-miner-${{ github.ref }}-${{ matrix.os }}.zip
+          asset_path: ./kda-miner-${{ matrix.os }}-${{ github.ref }}.zip
+          asset_name: kda-miner-${{ matrix.os }}-${{ github.ref }}.zip
           asset_content_type: application/zip
