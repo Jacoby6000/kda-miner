@@ -73,6 +73,10 @@ data OpenCLWork = OpenCLWork
   , workProgram :: !CLProgram
   , workKernel :: !CLKernel
   , workDevice :: !OpenCLDevice
+  , workInPtr :: Ptr Word8
+  , workOutPtr :: Ptr Word64
+  , workInBuf:: !CLMem
+  , workOutBuf :: !CLMem
   } 
 
 instance PP.Pretty OpenCLPlatform where
@@ -143,7 +147,11 @@ releaseWork w = do
   prog <- clReleaseProgram $ workProgram w
   queue <- clReleaseCommandQueue $ workQueue w
   ctx <- clReleaseContext (workContext w)
-  pure (kern && prog && ctx && queue)
+  inBuf <- clReleaseMemObject (workInBuf w)
+  outBuf <- clReleaseMemObject (workOutBuf w)
+  free (workInPtr w)
+  free (workOutPtr w)
+  pure (kern && prog && ctx && queue && inBuf && outBuf)
 
 text :: Text -> PP.Doc
 text = PP.text <$> T.unpack
@@ -202,24 +210,20 @@ prepareOpenCLWork source dev args kernelName = do
   builtProgram <- buildOpenCLProgram program dev args
   kernel <- createOpenCLKernel builtProgram kernelName
   queue <- clCreateCommandQueue context (deviceId dev) []
-  pure $ OpenCLWork context queue source builtProgram kernel dev
-
-run :: GPUEnv -> IORef Word64 -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO ByteString
-run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
-  let context = workContext work
   inPtr <- callocArray 320 :: IO (Ptr Word8)
   outPtr <- calloc :: IO (Ptr Word64)
   inBuf <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_COPY_HOST_PTR] (320 :: Int, castPtr inPtr)
   outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
-  prepareStaticInputs inPtr inBuf outPtr outBuf work
-  end <- doIt outPtr outBuf work
+  pure $ OpenCLWork context queue source builtProgram kernel dev inPtr outPtr inBuf outBuf
+
+run :: GPUEnv -> IORef Word64 -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO ByteString
+run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
+  prepareStaticInputs work
+  end <- doIt work
   let !result = BSL.toStrict $ BSB.toLazyByteString $ BSB.word64LE end
-  traverse_ clReleaseMemObject [inBuf, outBuf]
-  free inPtr
-  free outPtr
   pure result
  where
-  doIt outPtr outBuf w@(OpenCLWork _ queue _ _ kernel _) = do
+  doIt w@(OpenCLWork _ queue _ _ kernel _ _ outPtr _ outBuf) = do
     nonce <- genNonce
     clSetKernelArgSto kernel 0 nonce
     e1 <- clEnqueueNDRangeKernel queue kernel [globalSize cfg] [localSize cfg] []
@@ -230,11 +234,11 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
     traverse_ clReleaseEvent [e1, e2]
     !res <- peek outPtr
     if res == 0 then 
-      doIt outPtr outBuf w
+      doIt w
     else 
       return res 
 
-  prepareStaticInputs inPtr inBuf outPtr outBuf (OpenCLWork _ queue _ _ kern _) = do
+  prepareStaticInputs (OpenCLWork _ queue _ _ kern _ inPtr outPtr inBuf outBuf) = do
     let bufBytes = BS.unpack $ BS.append (pad 288 header) target
     pokeArray inPtr bufBytes
     clSetKernelArgSto kern 1 inBuf
