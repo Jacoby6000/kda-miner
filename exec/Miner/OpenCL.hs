@@ -242,9 +242,6 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
     clSetKernelArgSto kern 2 outBuf
     e0 <- clEnqueueWriteBuffer queue inBuf False (0::Int) 320 (castPtr inPtr) []
     e1 <- clEnqueueWriteBuffer queue outBuf True (0::Int) 8 (castPtr outPtr) [e0]
-    n <- peekElemOff ((castPtr inBuf) :: Ptr Word8) 320
-    putStrLn (show n)
-    pokeElemOff (castPtr inBuf) 320 n
     traverse_ clReleaseEvent [e0, e1]
 
   pad :: Int -> ByteString -> ByteString
