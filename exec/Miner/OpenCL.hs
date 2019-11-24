@@ -190,7 +190,7 @@ joinArgs = T.unpack . T.unwords
 
 buildOpenCLProgram :: CLProgram -> OpenCLDevice -> [Text] -> IO CLProgram
 buildOpenCLProgram prog device args = do
-  res <- try (clBuildProgram prog [(deviceId device)] (joinArgs args))
+  res <- try (clBuildProgram prog [deviceId device] (joinArgs args))
   case res of
     Left (err :: CLError) -> do
         -- TODO: logger

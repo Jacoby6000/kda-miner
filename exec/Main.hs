@@ -61,6 +61,7 @@
 module Main ( main ) where
 
 import           Miner.Kernel
+import qualified Control.Monad as M
 import           Control.Retry
 import           Data.Aeson (toJSON)
 import           Data.Time.Clock.POSIX (getPOSIXTime)
@@ -110,15 +111,19 @@ work cmd cargs = do
             Left e -> throwString $ show e
             Right results -> do
                 mUrls <- newIORef $ NEL.fromList results
-                stats <- traverse (const $ newIORef 0) (gpuDevices cmd)
+                totalDevices <- numDevices (gpuDevices cmd)
+                stats <- M.replicateM totalDevices (newIORef 0)
                 start <- newIORef 0
                 successStart <- getPOSIXTime >>= newIORef
                 runRIO (Env g m logFunc cmd cargs stats start successStart mUrls) $ do 
-                  miner <- validateMiner (miner cargs)
-                  runRIO (Env g m logFunc cmd (ClientArgs (ll cargs) (coordinators cargs) miner) stats start successStart mUrls) run
+                  goodMiner <- validateMiner (miner cargs)
+                  runRIO (Env g m logFunc cmd (ClientArgs (ll cargs) (coordinators cargs) goodMiner) stats start successStart mUrls) run
   where
     nodeVer :: HostAddress -> IO (Either Text (T2 HostAddress Text))
     nodeVer baseurl = (T2 baseurl <$>) <$> getInfo baseurl
+
+    numDevices [] = fmap (\ds -> length $ platformDevices =<< ds) queryAllOpenCLDevices
+    numDevices ds = pure $ length ds
     
     validateMiner :: Miner -> RIO Env Miner
     validateMiner (Miner acct [] pred) =
@@ -136,11 +141,9 @@ getInfo url = fmap nodeVersion <$> (getJSON url "/info" :: (IO (Either Text Node
 
 run :: RIO Env ()
 run = do
-  e <- ask 
   logInfo "Starting Miner."
   s <- scheme
   mining s
- where
 
 
 scheme :: RIO Env (TargetBytes -> HeaderBytes -> RIO Env HeaderBytes)
@@ -152,6 +155,9 @@ setUpOpenCL :: GPUEnv -> RIO Env [OpenCLWork]
 setUpOpenCL oce = do
     platforms <- liftIO queryAllOpenCLDevices
     devices <- fetchDevices platforms $ gpuDevices oce
+    logInfo $ "Beginning mining on " <> display (length devices) <> " GPUs."
+    traverse_ (logInfo . display) (T.pack . (\(idx, d) -> "GPU #" <> show idx <> ": " <> T.unpack (deviceName d) <> " @ " <> (show $ deviceMaxClock d) <> " MHz") <$> zip (L.findIndices (const True) devices) devices)
+    
     liftIO $ traverse (\d -> prepareOpenCLWork kernel d [wss] "search_nonce") devices
  where
   wss :: Text
