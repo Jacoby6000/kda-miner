@@ -38,6 +38,7 @@ executable kda-miner
     , Miner.OpenCL
     , Miner.Kernel
     , Miner.Http
+    , Miner.Chainweb
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       bytestring >= 0.10
@@ -78,3 +79,4 @@ executable kda-miner
     , binary >= 0.8.6
     , exceptions >= 0.10.3
     , lens >= 4.17
+    , cereal >= 0.5.8

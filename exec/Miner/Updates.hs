@@ -23,10 +23,9 @@ import qualified RIO.HashMap as HM
 import qualified RIO.NonEmpty as NEL
 import qualified RIO.Text as T
 import qualified Streaming.Prelude as SP
-
 -- internal modules
-
-import           Miner.Types (ChainId, Env(..), HostAddress(..), encodeChainId)
+import           Miner.Types (Env(..), HostAddress(..))
+import           Miner.Chainweb (ChainId, encodeChainId)
 
 ---
 

@@ -16,25 +16,18 @@ module Miner.Types
   , OtherCommand(..)
   , GPUDevice(..)
   , Magnitude(..)
-  , HeaderBytes(..)
-  , TargetBytes(..)
-  , ChainBytes(..)
-  , WorkBytes(..)
   , HostAddress(..)
-  , ChainId
+  , Miner(..)
     -- * miscellaneous
   , tlsSettings
   , donateTo
   , reduceMag
   , showT
-  , encodeChainId
   ) where
 
+import           Data.Aeson 
 import           Data.Generics.Product.Fields (field)
 import           Data.List
-import           Data.Bytes.Put
-import           Data.Bytes.Signed (unsigned)
-import qualified Data.ByteString.Char8 as B
 import           Data.List.Split
 import qualified Data.Text as T
 import           Data.Time.Clock.POSIX (POSIXTime)
@@ -42,7 +35,7 @@ import           Data.Tuple.Strict (T2(..))
 import           Network.Connection
 import           Network.HTTP.Client hiding (Proxy(..), responseBody, port, host)
 import           Options.Applicative
-import           RIO as R
+import           RIO as R hiding (fromEitherM)
 import           RIO.Char (isHexDigit)
 import qualified System.Random.MWC as MWC
 
@@ -79,10 +72,13 @@ data ClientArgs = ClientArgs
     deriving stock (Generic)
 
 data Miner = Miner
-  { accountName :: Text
+  { account :: Text
   , publicKeys :: [Text]
   , predicate :: Text
-  }
+  } deriving stock (Generic)
+
+instance ToJSON Miner where
+  toJSON (Miner acct keys pred) = object ["account" .= acct, "public-keys" .= keys, "predicate" .= pred]
 
 -- | The top-level git-style CLI "command" which determines which mining
 -- paradigm to follow.
@@ -91,9 +87,9 @@ data Command = GPU GPUEnv ClientArgs | Otherwise OtherCommand
 
 data GPUEnv = GPUEnv 
     { gpuDevices :: [GPUDevice] 
-    , globalSize :: Int
-    , localSize :: Int
-    , workSetSize :: Int
+    , globalSize :: Integer
+    , localSize :: Integer
+    , workSetSize :: Integer
     } deriving stock (Generic)
 
 data GPUDevice = GPUDevice
@@ -101,40 +97,27 @@ data GPUDevice = GPUDevice
   , deviceIndex :: Int
   } deriving stock (Generic)
 
-newtype HeaderBytes = HeaderBytes B.ByteString
-newtype TargetBytes = TargetBytes B.ByteString
-newtype ChainBytes = ChainBytes B.ByteString
-newtype WorkBytes = WorkBytes B.ByteString
-
-type ChainId = Word32
-
-encodeChainId :: MonadPut m => ChainId -> m ()
-encodeChainId i32 = putWord32le $ unsigned i32
-{-# INLINE encodeChainId #-}
-
-
 pClientArgs :: Parser ClientArgs
 pClientArgs = ClientArgs <$> pLog <*> some pUrl <*> pMiner 
 
 pCommand :: Parser Command
 pCommand = hsubparser
     (  command "mine" (info gpuOpts (progDesc "Perform mining"))
-    <> command "keys" (info (Otherwise <$> keysOpts) (progDesc "Generate public/private key pair"))
     <> command "show-devices" (info (Otherwise <$> showDevicesOpts) (progDesc "Show all available OpenCL Devices"))
     )
 
 pGpuEnv :: Parser GPUEnv
 pGpuEnv = GPUEnv <$> many pDevice <*> pGlobalSize <*> pLocalSize <*> pWorkSetSize  
 
-pGlobalSize :: Parser Int
+pGlobalSize :: Parser Integer
 pGlobalSize = option readOption
     (short 'g' <> long "global-size" <> help "OpenCL global work size (default 1024*1024*16)" <> value (1024*1024*16))
 
-pLocalSize :: Parser Int
+pLocalSize :: Parser Integer
 pLocalSize = option readOption
     (short 'l' <> long "local-size" <> help "OpenCL local work size (default 256)" <> value 256)
 
-pWorkSetSize :: Parser Int
+pWorkSetSize :: Parser Integer
 pWorkSetSize = option readOption 
     (short 'w' <> long "workset-size" <> help "OpenCL workset size (default 64)" <> value 64)
 
@@ -217,10 +200,7 @@ pMiner = Miner <$> accountName <*> many key <*> predicate
 donateTo :: Miner
 donateTo = Miner "JayKobe6k" ["84811e7773ec9f6546d8baaf48c79119414b4bed3bfe752c82af6326e5d6b7ff"] "keys-all"
 
-data OtherCommand = ShowDevices | Keys 
-
-keysOpts :: Parser OtherCommand
-keysOpts = pure Keys
+data OtherCommand = ShowDevices
 
 showDevicesOpts :: Parser OtherCommand
 showDevicesOpts = pure ShowDevices

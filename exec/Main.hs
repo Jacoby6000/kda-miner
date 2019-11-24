@@ -63,12 +63,10 @@ module Main ( main ) where
 
 import           Miner.Kernel
 import           Control.Retry
+import           Data.Aeson (toJSON)
 import           Data.Time.Clock.POSIX (getPOSIXTime)
 import qualified Data.List as L
 import           Data.Tuple.Strict (T2(..), T3(..))
-import           Network.HTTP.Client hiding (Proxy(..), responseBody)
-import           Network.HTTP.Client.TLS (mkManagerSettings)
-import           Network.HTTP.Types.Status (Status(..))
 import           Options.Applicative
 import           RIO
 import qualified RIO.ByteString as B
@@ -77,15 +75,17 @@ import           RIO.List.Partial ((!!))
 import qualified RIO.NonEmpty as NEL
 import qualified RIO.NonEmpty.Partial as NEL
 import qualified RIO.Text as T
+import           Network.HTTP.Client.TLS (mkManagerSettings)
+import           Network.HTTP.Client (newManager)
 import qualified System.Random.MWC as MWC
 import           Text.Printf (printf)
 
 -- internal modules
 import           Miner.OpenCL
 import           Miner.Types
+import           Miner.Chainweb
 import           Miner.Updates
-import qualified Pact.Types.Crypto as P hiding (PublicKey)
-import qualified Pact.Types.Util as P
+import           Miner.Http
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 --------------------------------------------------------------------------------
@@ -95,7 +95,6 @@ main :: IO ()
 main = execParser opts >>= \case
     GPU env cargs -> work env cargs >> exitFailure
     Otherwise ShowDevices -> PP.putDoc =<< PP.prettyList <$> queryAllOpenCLDevices
-    Otherwise Keys -> genKeys
   where
     opts :: ParserInfo Command
     opts = info (pCommand <**> helper)
@@ -107,7 +106,7 @@ work cmd cargs = do
     withLogFunc lopts $ \logFunc -> do
         g <- MWC.createSystemRandom
         m <- newManager (mkManagerSettings tlsSettings Nothing)
-        euvs <- sequence <$> traverse (nodeVer m) (coordinators cargs)
+        euvs <- sequence <$> traverse nodeVer (coordinators cargs)
         case euvs of
             Left e -> throwString $ show e
             Right results -> do
@@ -117,15 +116,13 @@ work cmd cargs = do
                 successStart <- getPOSIXTime >>= newIORef
                 runRIO (Env g m logFunc cmd cargs stats start successStart mUrls) run
   where
-    nodeVer :: Manager -> HostAddress -> IO (Either String (T2 HostAddress Text))
-    nodeVer m baseurl = (T2 baseurl <$>) <$> getInfo m baseurl
+    nodeVer :: HostAddress -> IO (Either Text (T2 HostAddress Text))
+    nodeVer baseurl = (T2 baseurl <$>) <$> getInfo baseurl
 
 
 
-getInfo :: Manager -> HostAddress -> IO (Either String Text)
-getInfo m url = fmap nodeVersion <$> runClientM (client (Proxy @NodeInfoApi)) cenv
-  where
-    cenv = ClientEnv m url Nothing
+getInfo :: HostAddress -> IO (Either Text Text)
+getInfo url = (fmap nodeVersion) <$> (getJSON url "/info" :: (IO (Either Text NodeInfo)))
 
 run :: RIO Env ()
 run = do
@@ -174,12 +171,6 @@ setUpOpenCL oce = do
 
     pure $ devices !! dIndex
 
-genKeys :: IO ()
-genKeys = do
-    kp <- P.genKeyPair P.defaultScheme
-    printf "public:  %s\n" (T.unpack . P.toB16Text $ P.getPublic kp)
-    printf "private: %s\n" (T.unpack . P.toB16Text $ P.getPrivate kp)
-
 -- | Attempt to get new work while obeying a sane retry policy.
 --
 getWork :: RIO Env (Maybe WorkBytes)
@@ -203,16 +194,16 @@ getWork = do
 
     warn :: Either Text WorkBytes -> RIO Env Bool
     warn (Right _) = pure False
-    warn (Left se) = logWarn ("Network Error: " <> e) $> True
+    warn (Left se) = logWarn (display se) $> True
 
-    f :: Env -> IO (Either String WorkBytes)
+    f :: Env -> IO (Either Text WorkBytes)
     f e = do
-        T2 u v <- NEL.head <$> readIORef (envUrls e)
+        T2 h v <- NEL.head <$> readIORef (envUrls e)
         acct <- runRIO e getMiningAcct
-        runClientM (workClient v (chainid a) $ acct) (ClientEnv m u Nothing)
+        response <- getWithBody h ("/chainweb/0.0/" <> T.unpack v <> "/mining/work") (toJSON acct)
+        pure (WorkBytes . BL.toStrict <$> response)
       where
         a = envArgs e
-        m = envMgr e
         getMiningAcct = do
           env <- ask
           seconds :: Integer <- liftIO $ round <$> getPOSIXTime 
@@ -233,8 +224,8 @@ workKey wb = do
     cid <- liftIO $ chain cbytes
     return $! UpdateKey
         { _updateKeyChainId = cid
-        , _updateKeyHost = baseUrlHost url
-        , _updateKeyPort = baseUrlPort url
+        , _updateKeyHost = T.unpack $ addressHostname url
+        , _updateKeyPort = addressPort url
         }
   where
     T3 cbytes _ _ = unWorkBytes wb
@@ -326,13 +317,12 @@ miningLoop updateMap inner = mask go
             before <- readIORef (envLastSuccess e)
             now <- liftIO getPOSIXTime
             writeIORef (envLastSuccess e) now
-            let !m = envMgr e
-                !d = ceiling (now - before) :: Int
+            let !d = ceiling (now - before) :: Int
             cid <- liftIO $ chainInt cbytes
-            hgh <- liftIO $ height hbytes
+            hgh <- liftIO $ headerHeight hbytes
             logInfo . display . T.pack $ printf "Chain %d: Mined block at Height %d. (%ds since last)" cid hgh d
-            T2 url v <- NEL.head <$> readIORef (envUrls e)
-            res <- liftIO . runClientM (solvedClient v h) $ ClientEnv m url Nothing
+            T2 host v <- NEL.head <$> readIORef (envUrls e)
+            res <- liftIO $ post host ("/chainweb/0.0/" <> T.unpack v <> "/mining/solved") (_headerBytes h)
             when (isLeft res) $ logWarn "Failed to submit new BlockHeader!"
           where
             T3 cbytes _ hbytes = unWorkBytes w
@@ -348,19 +338,7 @@ opencl works t h@(HeaderBytes blockbytes) = loop <* liftIO (traverse releaseWork
           Left (err :: SomeException) -> do
               logError . display . T.pack $ "Error running OpenCL miner: " <> show err
               throwM err
-          Right nonceBytes -> do
-              let newBytes = nonceBytes <> B.drop 8 blockbytes
-
-              -- FIXME Consider removing this check if during later benchmarking it
-              -- proves to be an issue.
-              bh <- runGet decodeBlockHeaderWithoutHash newBytes
-
-              if | not (prop_block_pow bh) -> do
-                      logError "Bad nonce returned from OpenCL miner!"
-                      loop
-                 | otherwise -> 
-                      pure $! HeaderBytes newBytes
-
+          Right nonceBytes -> pure . HeaderBytes $ nonceBytes <> B.drop 8 blockbytes
 
 -- -------------------------------------------------------------------------- --
 -- Utils
@@ -371,5 +349,5 @@ chain (ChainBytes cbs) = runGet decodeChainId cbs
 chainInt :: MonadThrow m => MonadIO m => ChainBytes -> m Int
 chainInt c = chainIdInt <$> chain c
 
-height :: MonadThrow m => MonadIO m => HeaderBytes -> m Word64
-height (HeaderBytes hbs) = _height <$> runGet decodeBlockHeight (B.take 8 $ B.drop 258 hbs)
+headerHeight :: MonadThrow m => MonadIO m => HeaderBytes -> m Word64
+headerHeight (HeaderBytes hbs) = height <$> runGet decodeBlockHeight (B.take 8 $ B.drop 258 hbs)

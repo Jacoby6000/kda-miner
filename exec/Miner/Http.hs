@@ -6,50 +6,59 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Miner.Http(NodeInfo(..)) where
+module Miner.Http(getJSON, getWithBody, getJSONWith, post) where
 
-import           Data.Bifunctor
 import           Control.Lens
 import           Control.Monad.Catch
 import           Miner.Types
 import           Data.Aeson
+import           Data.Bifunctor
 import           Data.Text.Lazy as LT
 import qualified Data.Text as T
+import qualified Data.List as L
 import           GHC.Generics
 import           Data.ByteString.Lazy
 import qualified Data.ByteString.Char8 as B8
-import qualified Network.HTTP.Types.Status as S
 import qualified Network.HTTP.Client as C
+import qualified Network.HTTP.Client.TLS as TLS
 import qualified Network.Wreq as W
+import qualified Network.Wreq.Types as WT
+import Prelude as P
 
-data NodeInfo = NodeInfo
-  { nodeVersion :: Text
-  , nodeApiVersion :: Text
-  , nodeChains :: [Text]
-  , nodeNumberOfChains :: !Int
-  } deriving (Generic)
+url :: HostAddress -> String -> String
+url (HostAddress h p) path = "https://" <> T.unpack h <> ":" <> show p <> path
 
-instance FromJSON NodeInfo
+withParams :: W.Options -> [(T.Text, [T.Text])] -> W.Options
+withParams = L.foldl (\acc (k, vs) -> acc & W.param k .~ vs)
 
-get :: FromJSON a => HostAddress -> String -> IO (Either Text a)
-get addr path = readResponse $ W.get (url addr)
-  where
-    url (HostAddress h p) = "https://" <> T.unpack h <> show p <> path
+httpOpts :: W.Options
+httpOpts = W.defaults & W.manager .~ Left (TLS.mkManagerSettings tlsSettings Nothing)
 
+post :: WT.Postable a => HostAddress -> String -> a -> IO (Either T.Text ByteString)
+post addr path a = second C.responseBody <$> readResponse (W.postWith httpOpts (url addr path) a)
 
-readResponse :: FromJSON a => IO (W.Response ByteString) -> IO (Either Text a)
-readResponse responseIO = 
-  (readJSON =<< responseIO) 
-    `catch` liftHandler handleHttpError 
-    `catch` liftHandler handleJsonError
- where
-  liftHandler f = pure . Left . LT.pack . f
+getWithBody :: (Show a, WT.Postable a) => HostAddress -> String -> a -> IO (Either T.Text ByteString)
+getWithBody addr path a = second C.responseBody <$> readResponse (W.customPayloadMethod "GET" (url addr path) a)
 
-  readJSON response = Right . C.responseBody <$> W.asJSON response
+getJSON :: FromJSON a => HostAddress -> String -> IO (Either T.Text a)
+getJSON addr path = getJSONWith addr path []
+
+getJSONWith :: FromJSON a => HostAddress -> String -> [(T.Text, [T.Text])] -> IO (Either T.Text a)
+getJSONWith addr path params = 
+  second C.responseBody <$> readJSONResponse (W.getWith (withParams httpOpts params) (url addr path))
+
+readJSONResponse :: FromJSON a => IO (W.Response ByteString) -> IO (Either T.Text (W.Response a))
+readJSONResponse responseIO = (readJSON =<< readResponse responseIO) `catch` liftHandler handleJsonError
+ where 
+  readJSON = traverse W.asJSON
 
   handleJsonError :: W.JSONError -> String
   handleJsonError (W.JSONError s) = "Bad JSON returned from server: " <> s
 
+
+readResponse :: IO (W.Response ByteString) -> IO (Either T.Text (W.Response ByteString))
+readResponse responseIO = (Right <$> responseIO) `catch` liftHandler handleHttpError
+ where
   handleHttpError :: C.HttpException -> String
   handleHttpError (C.InvalidUrlException url message) = "URL " <> url <> " is malformed: " <> message
   handleHttpError (C.HttpExceptionRequest _ ex) = case ex of
@@ -60,3 +69,5 @@ readResponse responseIO =
       <> show (res ^. W.responseStatus ^. W.statusCode) 
       <> ": " <> B8.unpack (res ^. W.responseStatus ^. W.statusMessage)
     other -> "Unhandled HTTP Error: " <> show other
+
+liftHandler f = pure . Left . T.pack . f

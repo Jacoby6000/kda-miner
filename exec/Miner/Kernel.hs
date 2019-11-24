@@ -409,7 +409,6 @@ kernel = unlines [""
   , ""
   , "    if (TEST_RESULT()) {"
   , "      *result_ptr = nonce;"
-  , "      break;"
   , "    }"
   , "  }"
   , "}" ]

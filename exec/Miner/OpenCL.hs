@@ -37,7 +37,8 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           System.Random
 
 
-import           Miner.Types(HeaderBytes(..), TargetBytes(..), Env(..), GPUEnv(..), Magnitude(..), reduceMag)
+import           Miner.Types(Env(..), GPUEnv(..), Magnitude(..), reduceMag)
+import           Miner.Chainweb
 
 data OpenCLPlatform = OpenCLPlatform
   { platformId :: !CLPlatformID
@@ -224,23 +225,21 @@ prepareOpenCLWork source devs args kernelName = do
 
 run :: GPUEnv -> IORef Word64 -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO ByteString
 run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
-  offsetP <- calloc :: IO (Ptr CSize)
   resP <- calloc :: IO (Ptr Word64)
   let bufBytes = BS.unpack $ BS.append (pad 288 header) target
   -- bufArrMem <- callocBytes 320 :: IO (Ptr Word8)
   bufArr <- newArray bufBytes
   !inBuf <- workPrepareInputBuf work 320 (castPtr bufArr)
-  end <- doIt offsetP resP inBuf bufArr work 
+  end <- doIt resP inBuf bufArr work 
   let !result = BSL.toStrict $ BSB.toLazyByteString $ BSB.word64LE end
   traverse_ clReleaseCommandQueue (workQueue <$> workQueues work)
   _ <- clReleaseContext (workContext work)
-  free offsetP
   free resP
   free bufArr
   free inBuf
   pure result
  where
-  doIt offsetP resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) = do
+  doIt resP !inBuf inBytes w@(OpenCLWork _ [queue] _ _ kernel _ resultBuf) = do
     nonce <- genNonce
     clSetKernelArgSto kernel 0 nonce
     clSetKernelArgSto kernel 1 inBuf
@@ -254,10 +253,10 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
     traverse_ clReleaseEvent [e1,e2,e3]
     !res <- peek resP
     if res == 0 then 
-      doIt offsetP resP inBuf inBytes w
+      doIt resP inBuf inBytes w
     else 
       return res 
-  doIt _ _ _ _ _ = error "using multiple devices at once is unsupported"
+  doIt _ _ _ _ = error "using multiple devices at once is unsupported"
 
   pad :: Int -> ByteString -> ByteString
   pad desiredLength bs = 
