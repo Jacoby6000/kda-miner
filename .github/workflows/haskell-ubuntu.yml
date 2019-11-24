@@ -39,7 +39,6 @@ jobs:
     - name: Cabal Dependencies
       run: |
         cabal update
-        cabal install --only-dependencies
 
     - name: Cabal Build
       run: |
