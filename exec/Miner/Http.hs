@@ -32,7 +32,7 @@ post :: WT.Postable a => HostAddress -> String -> a -> IO (Either T.Text ByteStr
 post addr path a = second C.responseBody <$> readResponse (W.postWith httpOpts (url addr path) a)
 
 getWithBody :: (Show a, WT.Postable a) => HostAddress -> String -> a -> IO (Either T.Text ByteString)
-getWithBody addr path a = second C.responseBody <$> readResponse (W.customPayloadMethod "GET" (url addr path) a)
+getWithBody addr path a = second C.responseBody <$> readResponse (W.customPayloadMethodWith "GET" httpOpts (url addr path) a)
 
 getJSON :: FromJSON a => HostAddress -> String -> IO (Either T.Text a)
 getJSON addr path = getJSONWith addr path []
