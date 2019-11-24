@@ -22,14 +22,14 @@ jobs:
         sudo apt-get install -y opencl-headers
         sudo apt-get install -y ocl-icd-* 
 
-    - name: Checkout code
-      uses: actions/checkout@master
-
     - name: Cabal Cache
       uses: actions/cache@v1
       with:
-        path: /home/runner/.cabal
+        path: .cabal
         key: ${{ matrix.os }}-cabal
+
+    - name: Checkout code
+      uses: actions/checkout@master
     
     - name: Build Cache
       uses: actions/cache@v1
