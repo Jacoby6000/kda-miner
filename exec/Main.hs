@@ -10,54 +10,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
--- |
--- Module: Main
--- Copyright: Copyright © 2019 Kadena LLC.
--- License: MIT
--- Maintainer: Colin Woodbury <colin@kadena.io>
--- Stability: experimental
---
--- The fast "inner loop" of the mining process. Asks for work from a Chainweb
--- Node, and submits results back to it.
---
--- == Purpose and Expectations ==
---
--- This tool is a low-level, pull-based, independent, focusable, multicore CPU
--- and GPU miner for Chainweb. By this we mean:
---
---   * low-level: The miner is not aware of how `BlockHeader`s are encoded into
---     `ByteString`s, as indicated by an external spec. It does not know how to
---     construct a full `BlockHeader` type, nor does it need to. It has no
---     concept of `Cut`s or the cut network used by Chainweb - it simply
---     attempts `Nonce`s until a suitable hash is found that matches the current
---     `HashTarget`.
---
---   * pull-based: Work is requested from some remote Chainweb Node, as
---     configured on the command line. The Miner is given an encoded candidate
---     `BlockHeader`, which it then injects a `Nonce` into, hashes, and checks
---     for a solution. If/when a solution is found, it is sent back to the
---     Chainweb Node to be reassociated with its Payload and published as a new
---     `Cut` to the network.
---
---   * independent: It is assumed that in general, individuals running Chainweb
---     Miners and Chainweb Nodes are separate entities. A Miner requests work
---     from a Node and trusts them to assemble a block. Nodes do not know who is
---     requesting work, but Miners know who they're requesting work from. In
---     this way, there is a many-to-one relationship between Mining Clients and
---     a Node.
---
---   * focusable: A Miner can be configured to prioritize work belonging to a
---     specific chain. Note, however, that if a work request for a particular
---     chain can't be filled by a Node (if say that Chain has progressed too far
---     relative to its neighbours), then the Node will send back whatever it
---     could find. This strategy is to balance the needs of Miners who have a
---     special interest in progressing a specific chain with the needs of the
---     network which requires even progress across all chains.
---
---   * multicore: The miner uses 1 CPU core by default, but can use as many as
---     you indicate. GPU support is also available.
---
-
 module Main ( main ) where
 
 import           Miner.Kernel
