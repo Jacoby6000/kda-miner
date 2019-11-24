@@ -21,7 +21,7 @@ jobs:
         uses: actions/cache@v1
         with:
           path: dist-newstyle
-          key: ${{ runner.OS }}-dist-${{ hashFiles('.ghc.environment.x86_64-linux-8.6.5' }}
+          key: ${{ runner.OS }}-dist-${{ hashFiles('.ghc.environment.x86_64-linux-8.6.5') }}
           restore-keys: |
             ${{ runner.OS }}-build-${{ env.cache-name }}
             ${{ runner.OS }}-build-
