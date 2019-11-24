@@ -79,7 +79,8 @@ jobs:
     needs: [build, release]
     runs-on: ubuntu-latest
     strategy:
-      matrix: [ubuntu-16.04, ubuntu-18.04]
+      matrix: 
+        os: [ubuntu-16.04, ubuntu-18.04]
     steps:
     - uses: actions/checkout@v1
     - name: Load Release URL File from release job
