@@ -129,7 +129,7 @@ jobs:
     - name: Create Artifact
       run: |
         ls -al
-        zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md
+        zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md LICENSE
 
     - name: Get Release File Name & Upload URL
       id: get_release_info
