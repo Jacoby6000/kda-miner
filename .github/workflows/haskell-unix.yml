@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-16.04, ubuntu-18.04, macos-latest]
+        os: [ubuntu-16.04, ubuntu-18.04]
 
     steps:
     - name: Set up Haskell
@@ -18,7 +18,6 @@ jobs:
         cabal-version: '3.0'
 
     - name: Ubuntu Dependencies
-      if: runner.os == 'ubuntu-16.04' || runner.os == 'ubuntu-18.04'
       run: | 
         sudo apt-get install -y opencl-headers
         sudo apt-get install -y ocl-icd-* 
@@ -30,20 +29,15 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/.cabal
-        key: ${{ runner.os }}-primes    
+        key: ${{ matrix.os }}-cabal
 
     - name: Cabal Dependencies
       run: |
         cabal update
         cabal install --only-dependencies
 
-    - name: Build Cache
-      uses: actions/cache@v1
-      with:
-        path: dist-newstyle
-        key: ${{ runner.os }}-primes
 
-    - name: Build
+    - name: Cabal Build
       run: |
         cabal configure
         cabal build
