@@ -11,17 +11,6 @@ jobs:
         os: [ubuntu-16.04, ubuntu-18.04]
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Read Caches
-      uses: actions/cache@v1
-      with:
-        path: dist-newstyle
-        key: ${{ runner.OS }}-dist-${{ hashFiles('.ghc.environment.x86_64-linux-8.6.5') }}
-        restore-keys: |
-          ${{ runner.OS }}-build-${{ env.cache-name }}
-          ${{ runner.OS }}-build-
-          ${{ runner.OS }}-
-
     - name: Set up Haskell
       uses: actions/setup-haskell@v1
       with:

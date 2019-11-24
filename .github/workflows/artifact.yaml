@@ -17,15 +17,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@master
-      - name: Read Caches
-        uses: actions/cache@v1
-        with:
-          path: dist-newstyle
-          key: ${{ runner.OS }}-dist-${{ hashFiles('.ghc.environment.x86_64-linux-8.6.5') }}
-          restore-keys: |
-            ${{ runner.OS }}-build-${{ env.cache-name }}
-            ${{ runner.OS }}-build-
-            ${{ runner.OS }}-
 
       - name: Set up Haskell
         uses: actions/setup-haskell@v1
@@ -59,6 +50,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+
       - name: Upload Release Asset
         id: upload-release-asset 
         uses: actions/upload-release-asset@v1.0.1
