@@ -85,11 +85,6 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
-    - name: Load Release URL File from release job
-      uses: actions/download-artifact@v1
-      with:
-        name: release_url
-
     - name: Get version
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
@@ -134,12 +129,17 @@ jobs:
         ls -al
         zip -j kda-miner-${{ matrix.os }}-${{ steps.get_version.outputs.VERSION }}.zip kda-miner README.md LICENSE
 
+    - name: Load Release URL File from release job
+      uses: actions/download-artifact@v1
+      with:
+        name: release_url
+
     - name: Get Release File Name & Upload URL
       id: get_release_info
       run: |
         ls -al
         echo ::set-output name=file_name::kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}
-        value=`cat release_url.txt`
+        value=`cat release_url/release_url.txt`
         echo ::set-output name=upload_url::$value
       env:
         TAG_REF_NAME: ${{ github.ref }}
