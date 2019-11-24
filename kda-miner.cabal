@@ -31,10 +31,6 @@ common commons
     -rtsopts 
     -with-rtsopts=-N 
     -O5
-    -static 
-    -threaded
-  cc-options: -static
-  ld-options: -static -pthread
 
 executable kda-miner
   import: commons
