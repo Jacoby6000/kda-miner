@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Miner.Http(getJSON, getWithBody, getJSONWith, post) where
+module Miner.Http(getJSON, getWithBody, post) where
 
 import           Control.Lens
 import           Control.Monad.Catch

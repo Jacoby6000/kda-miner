@@ -210,7 +210,7 @@ getWork = do
           let minutes :: Integer = round $ (fromIntegral seconds :: Double) / 60
           let donateTimeRemaining = mod minutes 100 - (100 - donateRate)
           let donate = (donateTimeRemaining > 0)
-          when donate (logInfo $ display ("Donating time for " <> (T.pack . show) donateTimeRemaining <> " minutes"))
+          when donate (logInfo $ display ("Donating time for " <> showT donateTimeRemaining <> " minutes"))
           pure $ if donate then donateTo else (miner . envArgs) env
 
 -- -------------------------------------------------------------------------- --

@@ -6,8 +6,6 @@
 module Miner.OpenCL(
   queryAllOpenCLDevices,
   openCLMiner,
-  filterDevices,
-  findDevice,
   prepareOpenCLWork,
   releaseWork,
   OpenCLPlatform(..),
@@ -173,17 +171,6 @@ pList prefix as = PP.vsep $ indexedDoc <$> zipped
   numberedDoc idx = prefixDoc <> text " #" <> integralDoc idx
   nestedDoc a = PP.nest 6 (PP.pretty a)
   indexedDoc (idx, a) = numberedDoc idx <> text ": " <> nestedDoc a
-
-filterDevices :: ((OpenCLPlatform, OpenCLDevice) -> Bool) -> [OpenCLPlatform] -> [OpenCLDevice]
-filterDevices f platforms = do
-  platform <- platforms
-  snd <$> L.filter f ((platform,) <$> platformDevices platform)
-
-findDevice :: ((OpenCLPlatform, OpenCLDevice) -> Bool) -> [OpenCLPlatform] -> Maybe OpenCLDevice
-findDevice f platforms = 
-  case filterDevices f platforms of
-    [] -> Nothing
-    a:_ -> Just a
 
 createOpenCLContext :: [OpenCLDevice] -> IO CLContext
 createOpenCLContext devices = clCreateContext (CL_CONTEXT_PLATFORM . devicePlatformId <$> devices) (deviceId <$> devices) putStrLn
