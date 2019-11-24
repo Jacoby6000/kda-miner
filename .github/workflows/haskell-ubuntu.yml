@@ -30,6 +30,12 @@ jobs:
       with:
         path: /home/runner/.cabal
         key: ${{ matrix.os }}-cabal
+    
+    - name: Build Cache
+      uses: actions/cache@v1
+      with:
+        path: dist-newstyle
+        key: ${{ matrix.os }}-dist-newstyle
 
     - name: Cabal Dependencies
       run: |
