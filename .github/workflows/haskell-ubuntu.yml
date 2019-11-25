@@ -8,6 +8,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-16.04, ubuntu-18.04]
+
+    - name: Checkout code
+      uses: actions/checkout@master
     
     steps:
     - name: Set up Haskell
@@ -15,27 +18,7 @@ jobs:
       with:
         ghc-version: '8.6.5'
         cabal-version: '3.0'
-
-    - name: Ubuntu Dependencies
-      run: | 
-        sudo apt-get install -y opencl-headers
-        sudo apt-get install -y ocl-icd-* 
-
-    - name: Cabal Cache
-      uses: actions/cache@v1
-      with:
-        path: /home/runner/.cabal
-        key: ${{ matrix.os }}-cabal
-
-    - name: Checkout code
-      uses: actions/checkout@master
     
-    - name: Build Cache
-      uses: actions/cache@v1
-      with:
-        path: dist-newstyle
-        key: ${{ matrix.os }}-dist-newstyle
-
     # Ugly hack. This will always cache-miss. See Load Artifact below
     - name: Prep Store Bin
       id: cache-bin
@@ -43,6 +26,27 @@ jobs:
       with:
         path: ./out
         key: ${{ matrix.os }}-bin-${{ github.sha }}
+
+
+    - name: Ubuntu Dependencies
+      if: steps.cache-bin.outputs.cache-hit != 'true'
+      run: | 
+        sudo apt-get install -y opencl-headers
+        sudo apt-get install -y ocl-icd-* 
+
+    - name: Cabal Cache
+      if: steps.cache-bin.outputs.cache-hit != 'true'
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/.cabal
+        key: ${{ matrix.os }}-cabal
+    
+    - name: Build Cache
+      if: steps.cache-bin.outputs.cache-hit != 'true'
+      uses: actions/cache@v1
+      with:
+        path: dist-newstyle
+        key: ${{ matrix.os }}-dist-newstyle
 
     - name: Cabal Build
       if: steps.cache-bin.outputs.cache-hit != 'true'
