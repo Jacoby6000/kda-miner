@@ -12,13 +12,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@master
     
-    steps:
-    - name: Set up Haskell
-      uses: actions/setup-haskell@v1
-      with:
-        ghc-version: '8.6.5'
-        cabal-version: '3.0'
-    
     # Ugly hack. This will always cache-miss. See Load Artifact below
     - name: Prep Store Bin
       id: cache-bin
@@ -26,6 +19,14 @@ jobs:
       with:
         path: ./out
         key: ${{ matrix.os }}-bin-${{ github.sha }}
+    
+    steps:
+    - name: Set up Haskell
+      if: steps.cache-bin.outputs.cache-hit != 'true'
+      uses: actions/setup-haskell@v1
+      with:
+        ghc-version: '8.6.5'
+        cabal-version: '3.0'
 
 
     - name: Ubuntu Dependencies
