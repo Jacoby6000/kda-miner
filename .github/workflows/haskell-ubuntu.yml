@@ -40,7 +40,7 @@ jobs:
       run: |
         cabal update
 
-        # Ugly hack. This will always cache-miss. See Load Artifact below
+    # Ugly hack. This will always cache-miss. See Load Artifact below
     - name: Prep Store Artifact
       uses: actions/cache@v1
       with:
@@ -112,6 +112,8 @@ jobs:
         path: ./out
         key: ${{ matrix.os }}-bin-$GITHUB_SHA
 
+    - name: LDD Info
+      run: |
         echo ""
         ldd --version
         echo ""
@@ -119,8 +121,9 @@ jobs:
 
         strip ./out/kda-miner
 
+    - name: Package Artifact 
+      run: |
         zip -j kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}.zip ./out/kda-miner README.md LICENSE
-
       env:
         TAG_REF_NAME: ${{ github.ref }}
 
