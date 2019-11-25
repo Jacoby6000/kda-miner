@@ -53,6 +53,7 @@ jobs:
         cabal build
         mkdir out
         cabal install --installdir=./out/
+        cp --remove-destination $(readlink ./out/kda-miner) ./out/kda-miner
 
 
   release:
