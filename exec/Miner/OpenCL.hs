@@ -207,12 +207,12 @@ prepareOpenCLWork source dev args kernelName = do
 run :: GPUEnv -> IORef Word64 -> TargetBytes -> HeaderBytes -> OpenCLWork -> IO Word64 -> IO ByteString
 run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
   let context = workContext work
-  inPtr <- callocArray 320 :: IO (Ptr Word8)
+  let bufBytes = BS.unpack $ BS.append (pad 288 header) target
+  inPtr <- newArray bufBytes
   outPtr <- calloc :: IO (Ptr Word64)
   inBuf <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_COPY_HOST_PTR] (320 :: Int, castPtr inPtr)
   outBuf  <- clCreateBuffer context [CL_MEM_WRITE_ONLY] (8 :: Int, nullPtr)
-  prepareStaticInputs inPtr outPtr inBuf outBuf work
-  end <- doIt outPtr outBuf work
+  end <- doIt bufBytes inPtr inBuf outPtr outBuf work
   let !result = BSL.toStrict $ BSB.toLazyByteString $ BSB.word64LE end
   free inPtr
   free outPtr
@@ -220,29 +220,26 @@ run cfg mSteps (TargetBytes target) (HeaderBytes header) work genNonce = do
   _ <- clReleaseMemObject outBuf
   pure result
  where
-  doIt outPtr outBuf w@(OpenCLWork _ queue _ _ kernel _) = do
+  doIt bufBytes inPtr inBuf outPtr outBuf w@(OpenCLWork _ queue _ _ kernel _) = do
     nonce <- genNonce
     clSetKernelArgSto kernel 0 nonce
-    e1 <- clEnqueueNDRangeKernel queue kernel [globalSize cfg] [localSize cfg] []
-    e2 <- clEnqueueReadBuffer queue outBuf False (0::Int) 8 (castPtr outPtr) [e1]
-    _ <- clWaitForEvents [e2]
+    clSetKernelArgSto kernel 1 inBuf
+    clSetKernelArgSto kernel 2 outBuf
+    e0 <- clEnqueueWriteBuffer queue inBuf False (0::Int) 320 (castPtr inPtr) []
+    e1 <- clEnqueueWriteBuffer queue outBuf False (0::Int) 8 (castPtr outPtr) [e0]
+    e2 <- clEnqueueNDRangeKernel queue kernel [globalSize cfg] [localSize cfg] [e1]
+    e3 <- clEnqueueReadBuffer queue outBuf False (0::Int) 8 (castPtr outPtr) [e2]
+    _ <- clWaitForEvents [e3]
     _ <- modifyIORef' mSteps (+ 1)
+    ss <- readIORef mSteps 
+    print ss
     -- required to avoid leaking everything else
-    traverse_ clReleaseEvent [e1, e2]
+    traverse_ clReleaseEvent [e0, e1, e2, e3]
     !res <- peek outPtr
     if res == 0 then 
-      doIt outPtr outBuf w
+      doIt bufBytes inPtr inBuf outPtr outBuf w
     else 
       return res 
-
-  prepareStaticInputs inPtr outPtr inBuf outBuf (OpenCLWork _ queue _ _ kern _) = do
-    let bufBytes = BS.unpack $ BS.append (pad 288 header) target
-    pokeArray inPtr bufBytes
-    clSetKernelArgSto kern 1 inBuf
-    clSetKernelArgSto kern 2 outBuf
-    e0 <- clEnqueueWriteBuffer queue inBuf False (0::Int) 320 (castPtr inPtr) []
-    e1 <- clEnqueueWriteBuffer queue outBuf True (0::Int) 8 (castPtr outPtr) [e0]
-    traverse_ clReleaseEvent [e0, e1]
 
   pad :: Int -> ByteString -> ByteString
   pad desiredLength bs = 
