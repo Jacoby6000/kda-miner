@@ -50,7 +50,7 @@ main = execParser opts >>= \case
   where
     opts :: ParserInfo Command
     opts = info (pCommand <**> helper)
-        (fullDesc <> progDesc "The Official Chainweb Mining Client")
+        (fullDesc <> progDesc "An unofficial chainweb open-cl mining client")
 
 work :: GPUEnv -> ClientArgs -> IO ()
 work cmd cargs = do
