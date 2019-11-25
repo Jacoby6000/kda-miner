@@ -40,15 +40,20 @@ jobs:
       run: |
         cabal update
 
+        # Ugly hack. This will always cache-miss. See Load Artifact below
+    - name: Prep Store Artifact
+      uses: actions/cache@v1
+      with:
+        path: ./out
+        key: ${{ matrix.os }}-bin-$GITHUB_SHA
+
     - name: Cabal Build
       run: |
         cabal configure
         cabal build
-        cabal install --installdir=./
-        echo ""
-        ldd --version
-        echo ""
-        ldd -r -v ./kda-miner
+        mkdir out
+        cabal install --installdir=./out/
+
 
   release:
     name: Create Github Release
@@ -100,46 +105,22 @@ jobs:
         ghc-version: '8.6.5'
         cabal-version: '3.0'
 
-    - name: Ubuntu Dependencies
-      run: | 
-        sudo apt-get install -y opencl-headers
-        sudo apt-get install -y ocl-icd-* 
-
-    - name: Cabal Cache
+    # Ugly hack. See ugly hack above.
+    - name: Load Artifact
       uses: actions/cache@v1
       with:
-        path: /home/runner/.cabal
-        key: ${{ matrix.os }}-cabal
-
-    - name: Checkout code
-      uses: actions/checkout@master
-    
-    - name: Build Cache
-      uses: actions/cache@v1
-      with:
-        path: dist-newstyle
-        key: ${{ matrix.os }}-dist-newstyle
-
-    - name: Cabal Dependencies
-      run: |
-        cabal update
-
-    - name: Cabal Build
-      run: |
-        cabal configure
-        cabal build
-
-    - name: Create Artifact
-      run: |
-        cabal install --installdir=./
+        path: ./out
+        key: ${{ matrix.os }}-bin-$GITHUB_SHA
 
         echo ""
         ldd --version
         echo ""
-        ldd -r -v ./kda-miner
+        ldd -r -v ./out/kda-miner
 
-        strip kda-miner
-        zip -j kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}.zip kda-miner README.md LICENSE
+        strip ./out/kda-miner
+
+        zip -j kda-miner-${{ matrix.os }}-${TAG_REF_NAME##*/v}.zip ./out/kda-miner README.md LICENSE
+
       env:
         TAG_REF_NAME: ${{ github.ref }}
 
