@@ -8,6 +8,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-16.04, ubuntu-18.04]
+    
+    steps:
 
     - name: Checkout code
       uses: actions/checkout@master
@@ -20,7 +22,6 @@ jobs:
         path: ./out
         key: ${{ matrix.os }}-bin-${{ github.sha }}
     
-    steps:
     - name: Set up Haskell
       if: steps.cache-bin.outputs.cache-hit != 'true'
       uses: actions/setup-haskell@v1
