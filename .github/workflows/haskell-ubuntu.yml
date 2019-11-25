@@ -42,10 +42,13 @@ jobs:
 
     - name: Cabal Build
       run: |
-        ldd --version
-        echo ""
         cabal configure
         cabal build
+        cabal install --installdir=./
+        echo ""
+        ldd --version
+        echo ""
+        ldd -r -v ./kda-miner
 
   release:
     name: Create Github Release
