@@ -45,7 +45,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ./out
-        key: ${{ matrix.os }}-bin-$GITHUB_SHA
+        key: ${{ matrix.os }}-bin-${{ github.sha }}
 
     - name: Cabal Build
       run: |
@@ -110,7 +110,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ./out
-        key: ${{ matrix.os }}-bin-$GITHUB_SHA
+        key: ${{ matrix.os }}-bin-${{ github.sha }}
 
     - name: LDD Info
       run: |
