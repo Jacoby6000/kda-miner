@@ -22,6 +22,12 @@ jobs:
         path: ./out
         key: ${{ matrix.os }}-bin-${{ github.sha }}
     
+    # Ugly hack. This will always cache-miss. See Load Artifact below
+    - name: Skip build
+      if: steps.cache-bin.outputs.cache-hit == 'true'
+      run: |
+        echo "Skipping CI. This SHA has already been successfully built."
+    
     - name: Set up Haskell
       if: steps.cache-bin.outputs.cache-hit != 'true'
       uses: actions/setup-haskell@v1
