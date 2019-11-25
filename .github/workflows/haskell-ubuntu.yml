@@ -36,22 +36,22 @@ jobs:
         path: dist-newstyle
         key: ${{ matrix.os }}-dist-newstyle
 
-    - name: Cabal Dependencies
-      run: |
-        cabal update
-
     # Ugly hack. This will always cache-miss. See Load Artifact below
-    - name: Prep Store Artifact
+    - name: Prep Store Bin
+      id: cache-bin
       uses: actions/cache@v1
       with:
         path: ./out
         key: ${{ matrix.os }}-bin-${{ github.sha }}
 
     - name: Cabal Build
+      if: steps.cache-bin.outputs.cache-hit != 'true'
       run: |
+        cabal update
         cabal configure
         cabal build
-        mkdir out
+        mkdir -p ./out
+        rm -rf ./out/*
         cabal install --installdir=./out/
         cp --remove-destination $(readlink ./out/kda-miner) ./out/kda-miner
 
@@ -107,7 +107,7 @@ jobs:
         cabal-version: '3.0'
 
     # Ugly hack. See ugly hack above.
-    - name: Load Artifact
+    - name: Load Bin
       uses: actions/cache@v1
       with:
         path: ./out
